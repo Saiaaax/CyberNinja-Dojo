@@ -778,6 +778,37 @@ def print_summary(results: list[tuple[str, bool, float, str, Optional[str]]]):
           f"{color(str(failed) + ' failed', Colors.RED)}, "
           f"{total_time:.1f}s total")
 
+def parse_module_selection(module_arg: str) -> list[str]:
+    """Parse comma-separated module names into a list of stripped names."""
+    if not module_arg or module_arg.lower() == 'all':
+        return [m.name for m in MODULES]
+    return [name.strip() for name in module_arg.split(',') if name.strip()]
+
+
+def validate_module_names(names: list[str]) -> list[str]:
+    """Validate module names against known modules. Returns list of invalid names."""
+    valid_names = {m.name for m in MODULES}
+    return [name for name in names if name not in valid_names]
+
+
+def get_module_by_name(name: str) -> Optional[Module]:
+    """Get a Module object by name. Returns None if not found."""
+    for module in MODULES:
+        if module.name == name:
+            return module
+    return None
+
+
+def print_module_list():
+    """Print all available modules with their details."""
+    print(f"{'Name':<20} {'Language':<12} {'Directory':<30} {'Build Command'}")
+    print("-" * 90)
+    for m in MODULES:
+        build_cmd = ' '.join(m.build_cmd)
+        rel_dir = m.dir.relative_to(ROOT)
+        print(f"{m.name:<20} {m.language:<12} {str(rel_dir):<30} {build_cmd}")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Tent of Trials  -  Multi-Language Build System",
@@ -816,8 +847,27 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--list-modules", action="store_true",
+        help="List available modules with details and exit",
+    )
 
     args = parser.parse_args()
+
+    # Handle --list-modules
+    if args.list_modules:
+        print_module_list()
+        sys.exit(0)
+
+    # Validate module selection
+    if args.module and args.module.lower() != 'all':
+        selected_names = parse_module_selection(args.module)
+        invalid = validate_module_names(selected_names)
+        if invalid:
+            valid_list = ', '.join(m.name for m in MODULES)
+            print(f"ERROR: Unknown module(s): {', '.join(invalid)}", file=sys.stderr)
+            print(f"Valid modules: {valid_list}", file=sys.stderr)
+            sys.exit(1)
 
     print(f"\n  {color('Tent of Trials: building', Colors.CYAN)}")
     print(f"  Working directory: {ROOT}")
@@ -825,6 +875,11 @@ Diagnostic bundle:
 
     if args.list:
         print(f"  {color('Available modules:', Colors.BOLD)}")
+        for m in MODULES:
+            print(f"    {color(m.name, Colors.CYAN)} ({m.language})")
+            print(f"      dir: {m.dir.relative_to(ROOT)}")
+            print(f"      build: {' '.join(m.build_cmd)}")
+        return 0
         for m in MODULES:
             print(f"    {color(m.name, Colors.CYAN)} ({m.language})")
             print(f"      dir: {m.dir.relative_to(ROOT)}")
