@@ -163,6 +163,18 @@ MODULES = [
         build_dir=None,
     ),
     Module(
+        name="nfc-scanner-checksums",
+        language="Lua",
+        dir=ROOT / "frailbox" / "nfc",
+        build_cmd=[
+            "sh",
+            "-c",
+            "luac -p scanner.lua test_scanner_checksums.lua && lua test_scanner_checksums.lua",
+        ],
+        clean_cmd=["echo", "Lua has no build artifacts to clean"],
+        build_dir=None,
+    ),
+    Module(
         name="openapi-haskell",
         language="Haskell",
         dir=ROOT / "docs" / "openapi",

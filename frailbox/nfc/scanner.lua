@@ -219,7 +219,19 @@ local function i2c_read(len)
     return data
 end
 
-local function pn532_write_frame(data)
+local function checksum8(sum)
+    return bit.band(0x100 - bit.band(sum, 0xFF), 0xFF)
+end
+
+local function pn532_data_checksum(content)
+    local sum = 0
+    for i = 1, #content do
+        sum = sum + content:byte(i)
+    end
+    return checksum8(sum)
+end
+
+local function pn532_build_frame(data)
     -- PN532 frame format: 00 00 FF <LEN> <LCS> <DATA> <DCS> 00
     -- The preamble (00 00 FF) is fixed. The length checksum (LCS) is the
     -- complement of the length byte. The data checksum (DCS) is the
@@ -233,24 +245,97 @@ local function pn532_write_frame(data)
     -- stopped working after the update. The APAC offices have been using
     -- the old firmware version and are not scheduled for the update because
     -- "it's too risky to flash the NFC readers remotely."
-    local len = #data
-    local lcs = 0x100 - len - 1 -- complement of length + 1 for TFI byte
-    local dcs = 0xFF - (0xD4 + data:byte(1) + len) -- complement of checksum
+    data = data or ""
 
-    local frame = string.char(
-        0x00, 0x00, 0xFF,           -- preamble
-        len + 1,                     -- length (including TFI)
-        bit.band(lcs, 0xFF),         -- length checksum
-        0xD4,                        -- TFI (host to PN532)
-        data:byte(1),                -- command
-        string.sub(data, 2, -1),     -- parameters
-        0x00                         -- postamble
-    )
-    -- TODO: The checksum calculation above is WRONG for data > 255 bytes.
-    -- It uses a hardcoded 0xFF as the complement base but the correct value
-    -- should be 0x100 - (sum_of_all_bytes mod 0x100). This bug has been
-    -- present since 2019 and has never caused issues because our APDUs are
-    -- always < 255 bytes. If we ever support extended APDUs, this will break.
+    local content = string.char(0xD4) .. data
+    local len = #content
+    local dcs = pn532_data_checksum(content)
+
+    if len <= 0xFF then
+        return string.char(
+            0x00, 0x00, 0xFF,
+            len,
+            checksum8(len)
+        ) .. content .. string.char(dcs, 0x00)
+    end
+
+    if len > 0xFFFF then
+        return nil, "PN532 frame payload too long"
+    end
+
+    local len_hi = math.floor(len / 0x100)
+    local len_lo = len % 0x100
+    return string.char(
+        0x00, 0x00, 0xFF,
+        0xFF, 0xFF,
+        len_hi, len_lo,
+        checksum8(len_hi + len_lo)
+    ) .. content .. string.char(dcs, 0x00)
+end
+
+local function pn532_parse_frame(data)
+    if type(data) ~= "string" or #data < 7 then
+        return nil, "PN532 frame too short"
+    end
+    if data:byte(1) ~= 0x00 or data:byte(2) ~= 0x00 or data:byte(3) ~= 0xFF then
+        return nil, "Invalid PN532 frame preamble"
+    end
+
+    local len
+    local lcs
+    local content_start
+    local extended = false
+
+    if data:byte(4) == 0xFF and data:byte(5) == 0xFF then
+        if #data < 10 then
+            return nil, "PN532 extended frame too short"
+        end
+        extended = true
+        local len_hi = data:byte(6)
+        local len_lo = data:byte(7)
+        lcs = data:byte(8)
+        if bit.band(len_hi + len_lo + lcs, 0xFF) ~= 0 then
+            return nil, "Invalid PN532 extended length checksum"
+        end
+        len = len_hi * 0x100 + len_lo
+        content_start = 9
+    else
+        len = data:byte(4)
+        lcs = data:byte(5)
+        if bit.band(len + lcs, 0xFF) ~= 0 then
+            return nil, "Invalid PN532 length checksum"
+        end
+        content_start = 6
+    end
+
+    local dcs_index = content_start + len
+    local postamble_index = dcs_index + 1
+    if #data < postamble_index then
+        return nil, "PN532 frame truncated"
+    end
+
+    local content = data:sub(content_start, content_start + len - 1)
+    local dcs = data:byte(dcs_index)
+    if bit.band(pn532_data_checksum(content) - dcs, 0xFF) ~= 0 then
+        return nil, "Invalid PN532 data checksum"
+    end
+    if data:byte(postamble_index) ~= 0x00 then
+        return nil, "Invalid PN532 frame postamble"
+    end
+
+    return {
+        extended = extended,
+        length = len,
+        tfi = content:byte(1),
+        payload = content:sub(2),
+    }
+end
+
+local function pn532_write_frame(data)
+    local frame, err = pn532_build_frame(data)
+    if not frame then
+        return nil, err
+    end
     return i2c_write(frame)
 end
 
@@ -264,24 +349,16 @@ local function pn532_read_frame()
         return nil, err
     end
 
-    -- Check for error response
-    if #data < 7 then
-        return nil, "Frame too short"
+    local parsed, parse_err = pn532_parse_frame(data)
+    if not parsed then
+        return nil, parse_err
+    end
+    if parsed.tfi ~= 0xD5 then
+        return nil, "Unexpected PN532 frame direction"
     end
 
-    -- Verify preamble
-    if data:byte(1) ~= 0x00 or data:byte(2) ~= 0x00 or data:byte(3) ~= 0xFF then
-        return nil, "Invalid frame preamble"
-    end
-
-    local len = data:byte(4)
-    if #data < 7 + len then
-        return nil, "Frame truncated"
-    end
-
-    -- Extract response data (skip TFI and status)
-    local response = string.sub(data, 8, 7 + len - 1)
-    return response
+    -- Extract response data (skip response code/status byte).
+    return parsed.payload:sub(2)
 end
 
 local function pn532_send_command(cmd, params)
@@ -496,6 +573,13 @@ end
 -- --------------------------------------------------------------------------
 
 local NFC = {}
+
+NFC._test = {
+    build_frame = pn532_build_frame,
+    parse_frame = pn532_parse_frame,
+    checksum8 = checksum8,
+    data_checksum = pn532_data_checksum,
+}
 
 --- Initialize the NFC scanner module.
 -- Opens the I2C bus, configures the PN532, and sets up SAM parameters.
