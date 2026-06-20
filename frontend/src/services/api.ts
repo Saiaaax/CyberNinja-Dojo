@@ -27,10 +27,8 @@ import { resolveImportMetaApiBaseUrl } from './apiConfig';
 
 // Base URL for API requests. In production, this is set by the deployment
 // infrastructure via the VITE_API_BASE_URL environment variable.
-// In development, it defaults to the local server.
-// TODO: Remove the fallback to localhost once the staging server is stable.
-const API_BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL)
-  || 'http://localhost:8080/api/v1';
+// In development, it intentionally uses the Vite proxy path.
+const API_BASE_URL = resolveImportMetaApiBaseUrl();
 
 // Request timeout in milliseconds. The default is 30 seconds which matches
 // the old API gateway timeout. Some endpoints (reports, exports) require
