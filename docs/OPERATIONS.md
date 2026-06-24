@@ -276,6 +276,63 @@ Audit logs are retained for 365 days and include:
 | Penetration test | Quarterly | External vendor |
 | Compliance audit | Annually | External auditor |
 
+## Build System
+
+### Diagnostic Artifacts
+
+Each `python3 build.py` run generates diagnostic artifacts in `diagnostic/` named
+after the current git commit (e.g., `build-a1b2c3d4.logd`, `build-a1b2c3d4.json`).
+These artifacts capture build output and are committed automatically by the build script.
+
+### --check-stale: CI gate for stale diagnostic artifacts
+
+The `--check-stale` flag detects diagnostic artifacts from previous commits — useful
+as a CI gate to prevent outdated diagnostics from accumulating across builds.
+
+```bash
+python3 build.py --check-stale
+```
+
+- Exits `0` if no stale (non-current-commit) artifacts are present.
+- Exits `1` if stale artifacts exist, printing the file count and total byte size.
+
+#### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--check-stale` | off | Enable the stale-artifact CI gate |
+| `--max-stale-bytes` | `0` | Byte threshold before failing (0 = any stale fails) |
+| `--retention-dir` | `diagnostic/` | Directory to inspect |
+
+#### Examples
+
+```bash
+# Fail if any stale artifacts exist (strictest — recommended for CI)
+python3 build.py --check-stale
+
+# Allow up to 10 KB of stale artifacts before failing
+python3 build.py --check-stale --max-stale-bytes 10240
+
+# Inspect a non-default directory
+python3 build.py --check-stale --retention-dir /tmp/my-build/diagnostic
+```
+
+#### CI integration
+
+```yaml
+- name: Check for stale diagnostic artifacts
+  run: python3 build.py --check-stale
+```
+
+The flag is read-only: it never deletes artifacts. Pair with `--retention-report`
+to inspect what exists before gating.
+
+```bash
+# Inspect first, then gate
+python3 build.py --retention-report
+python3 build.py --check-stale
+```
+
 ## Troubleshooting
 
 ### Common Issues
