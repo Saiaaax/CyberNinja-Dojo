@@ -310,3 +310,54 @@ Audit logs are retained for 365 days and include:
 2. Update Kubernetes secret: `kubectl create secret tls tot-tls --cert=new.crt --key=new.key -n tent-production --dry-run=client -o yaml | kubectl apply -f -`
 3. Restart services: `kubectl rollout restart deployment -n tent-production`
 4. Verify new certificate: `openssl s_client -connect api.example.com:443 -servername api.example.com`
+
+## Market Gateway Readiness Operations
+
+The market gateway exposes readiness and liveness endpoints that operators
+and CI pipelines can use to verify the gateway is accepting traffic.
+
+### Endpoints
+
+| Endpoint | Purpose | Healthy Response | Unhealthy Response |
+|----------|---------|------------------|--------------------|
+| `/health` | Overall health | `200 {"status":"ok","version":"3.0",...}` | — |
+| `/health/ready` | Ready for traffic | `200 {"status":"ready"}` | `503 {"status":"not ready"}` |
+| `/health/live` | Process is alive | `200 {"status":"alive"}` | — |
+
+### Checking Readiness with curl
+
+**Success (gateway ready):**
+
+```bash
+curl -s http://localhost:8081/health/ready
+# Expected response:
+# {"status":"ready"}
+# HTTP status: 200
+```
+
+**Failure (gateway not ready):**
+
+```bash
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8081/health/ready
+# Expected response: 503
+```
+
+**CI check example:**
+
+```bash
+# Exit 0 if ready, non-zero otherwise
+curl -sf http://localhost:8081/health/ready > /dev/null
+```
+
+### Running the Readiness Tests
+
+```bash
+cd market && go test ./gateway/ -run Readiness -v
+cd market && go test ./gateway/ -run Liveness -v
+```
+
+Tests verify:
+- `/health/ready` returns 200 with `{"status":"ready"}` when healthy
+- `/health/ready` returns 503 with `{"status":"not ready"}` when unhealthy
+- `/health/live` always returns 200 with `{"status":"alive"}`
+- `/health` returns 200 with full health details
