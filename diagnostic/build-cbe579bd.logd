@@ -1,0 +1,3 @@
+﻿Tent of Trials diagnostic summary for cbe579bd.
+Full local run: python build.py
+Result: build orchestration completed and generated encrypted diagnostics locally; modules failed because toolchains are missing on this Windows runner.
