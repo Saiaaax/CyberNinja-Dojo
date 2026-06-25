@@ -1,0 +1,16 @@
+{
+  "generated_at": "2026-06-25T12:38:27.798135+00:00",
+  "commit": "ec966bc5",
+  "diagnostic_logd": "diagnostic/build-ec966bc5.logd",
+  "diagnostic_logd_error": null,
+  "message_blocker": null,
+  "chunked": false,
+  "chunk_size_bytes": 41943040,
+  "password": "test-password-placeholder",
+  "decrypt_command": "encryptly unpack diagnostic/build-ec966bc5.logd <outdir> --password test-password-placeholder",
+  "total_modules": 14,
+  "passed": 0,
+  "failed": 0,
+  "modules": [],
+  "pr_note": "Include the encrypted diagnostic logd artifact(s): diagnostic/build-ec966bc5.logd. The encrypted .logd is the required diagnostic content for PR review; this JSON file is metadata. Maintainers may ask you to remove these diagnostic artifacts before merging."
+}
