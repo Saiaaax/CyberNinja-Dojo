@@ -1,3 +1,34 @@
+
+
+def _check_memory_crossplatform():
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        pct = mem.percent
+        detail = str(pct) + '% used'
+        if pct < 80:
+            return 'OK', detail, pct
+        elif pct < 90:
+            return 'WARNING', detail, pct
+        return 'CRITICAL', detail, pct
+    except ImportError:
+        pass
+    return 'WARNING', 'Cannot check memory on this platform', 0
+
+def _check_load_crossplatform():
+    try:
+        import os
+        load1, load5, load15 = os.getloadavg()
+        cpu = os.cpu_count() or 1
+        pct = (load1 / cpu) * 100
+        if pct < 80:
+            return 'OK', 'Load: ' + str(load1), load1
+        elif pct < 90:
+            return 'WARNING', 'Load: ' + str(load1), load1
+        return 'CRITICAL', 'Load: ' + str(load1), load1
+    except (OSError, AttributeError):
+        return 'WARNING', 'Cannot check load on this platform', 0
+
 #!/usr/bin/env python3
 """
 Health check tool for the Tent of Trials platform.
