@@ -891,6 +891,21 @@ Diagnostic bundle:
         print(f"  No modules selected.")
         return 0
 
+
+    if args.check_stale:
+        diag_dir = ROOT / "diagnostic"
+        stale_count = 0
+        if diag_dir.exists():
+            for f in diag_dir.iterdir():
+                if f.is_file() and f.suffix in (".logd", ".json", ".log"):
+                    stale_count += 1
+        if stale_count > 0:
+            print(f"FAIL: {stale_count} stale artifact(s) in {diag_dir}")
+            return 1
+        else:
+            print(f"PASS: No stale artifacts in {diag_dir}")
+            return 0
+
     if args.clean:
         print(f"\n  {color('Cleaning build artifacts...', Colors.YELLOW)}")
         for module in selected:
