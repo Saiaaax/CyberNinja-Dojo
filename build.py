@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 
 import argparse
 import datetime
@@ -67,6 +67,66 @@ def split_diagnostic_logd(logd_path: Path, chunk_size: int = DIAGNOSTIC_CHUNK_SI
 
     logd_path.unlink()
     return chunks
+
+
+def diagnostic_artifact_paths(diagnostic_dir: Optional[Path] = None) -> list[Path]:
+    """Return diagnostic artifacts managed by this build script."""
+    artifact_dir = diagnostic_dir or DIAGNOSTIC_DIR
+    if not artifact_dir.exists():
+        return []
+
+    patterns = [
+        "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].logd",
+        "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-part*.logd",
+        "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].json",
+        "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-metadata.json",
+    ]
+    artifacts: list[Path] = []
+    for pattern in patterns:
+        artifacts.extend(path for path in artifact_dir.glob(pattern) if path.is_file())
+    return sorted(set(artifacts))
+
+
+def is_current_commit_artifact(path: Path, commit_id: str) -> bool:
+    """Return True when a diagnostic artifact belongs to the current commit."""
+    name = path.name
+    if name in {
+        "build-00000000.logd",
+        "build-00000000.json",
+        "build-00000000-metadata.json",
+    }:
+        return True
+    prefix = f"build-{commit_id}"
+    return (
+        name == f"{prefix}.logd"
+        or name == f"{prefix}.json"
+        or name == f"{prefix}-metadata.json"
+        or (name.startswith(f"{prefix}-part") and name.endswith(".logd"))
+    )
+
+
+def stale_diagnostic_artifacts(
+    commit_id: Optional[str] = None,
+    diagnostic_dir: Optional[Path] = None,
+) -> list[Path]:
+    """Return older diagnostic artifacts that do not belong to the current commit."""
+    active_commit = commit_id or current_commit_id()
+    return [
+        artifact
+        for artifact in diagnostic_artifact_paths(diagnostic_dir)
+        if not is_current_commit_artifact(artifact, active_commit)
+    ]
+
+
+def stale_diagnostic_bytes(stale_artifacts: list[Path]) -> int:
+    """Return the total size of stale diagnostic artifacts."""
+    total = 0
+    for artifact in stale_artifacts:
+        try:
+            total += artifact.stat().st_size
+        except OSError:
+            pass
+    return total
 
 
 @dataclass
@@ -368,6 +428,8 @@ def build_module(
                     return False, time.time() - start, f"npm install failed:\n{install_result.stderr}"
             except subprocess.TimeoutExpired:
                 return False, time.time() - start, "npm install TIMEOUT (120s)"
+            except FileNotFoundError as e:
+                return False, 0, f"Command not found: {e}"
 
     if module.name == "engine":
 
@@ -822,6 +884,7 @@ Examples:
   python3 build.py -m backend         Build only backend
   python3 build.py -m frontend,market Build frontend and market
   python3 build.py --clean            Clean all artifacts
+  python3 build.py --check-stale      Fail if older diagnostics exist
   python3 build.py --release          Release build (Rust only)
   python3 build.py --verbose          Verbose output
 
@@ -850,8 +913,19 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Exit 1 if older diagnostic artifacts exist; does not delete files",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Allowed stale diagnostic bytes before --check-stale fails (default: 0)",
+    )
 
     args = parser.parse_args()
+
+    if args.max_stale_bytes < 0:
+        parser.error("--max-stale-bytes must be 0 or greater")
 
     print(f"\n  {color('Tent of Trials: building', Colors.CYAN)}")
     print(f"  Working directory: {ROOT}")
@@ -863,6 +937,32 @@ Diagnostic bundle:
             print(f"    {color(m.name, Colors.CYAN)} ({m.language})")
             print(f"      dir: {m.dir.relative_to(ROOT)}")
             print(f"      build: {' '.join(m.build_cmd)}")
+        return 0
+
+    if args.check_stale:
+        commit_id = current_commit_id()
+        stale_artifacts = stale_diagnostic_artifacts(commit_id)
+        stale_bytes = stale_diagnostic_bytes(stale_artifacts)
+        print(f"  {color('Checking stale diagnostic artifacts...', Colors.GRAY)}")
+        print(f"  Current diagnostic commit: {commit_id}")
+        print(f"  Stale diagnostic bytes: {stale_bytes}")
+        if stale_artifacts:
+            print(f"  {color('Stale diagnostic artifacts:', Colors.YELLOW)}")
+            for artifact in stale_artifacts:
+                try:
+                    display_path = artifact.relative_to(ROOT)
+                except ValueError:
+                    display_path = artifact
+                print(f"    {display_path} ({artifact.stat().st_size} bytes)")
+
+        if stale_bytes > args.max_stale_bytes:
+            print(
+                f"  {color('Stale diagnostic artifacts exceed the allowed threshold.', Colors.RED)}"
+            )
+            print(f"  Allowed stale bytes: {args.max_stale_bytes}")
+            return 1
+
+        print(f"  {color('No stale diagnostic gate violations found.', Colors.GREEN)}")
         return 0
 
     print(f"  {color('Checking prerequisites...', Colors.GRAY)}")
@@ -896,12 +996,7 @@ Diagnostic bundle:
         for module in selected:
             clean_module(module, args.verbose)
 
-        diagnostic_artifacts = [ROOT / "build.logd"]
-        if DIAGNOSTIC_DIR.exists():
-            diagnostic_artifacts.extend(DIAGNOSTIC_DIR.glob("build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].logd"))
-            diagnostic_artifacts.extend(DIAGNOSTIC_DIR.glob("build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-part*.logd"))
-            diagnostic_artifacts.extend(DIAGNOSTIC_DIR.glob("build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].json"))
-            diagnostic_artifacts.extend(DIAGNOSTIC_DIR.glob("build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-metadata.json"))
+        diagnostic_artifacts = [ROOT / "build.logd", *diagnostic_artifact_paths()]
         for artifact in diagnostic_artifacts:
             if artifact.exists():
                 if artifact.is_dir():
@@ -942,3 +1037,4 @@ Diagnostic bundle:
 
 if __name__ == "__main__":
     sys.exit(main())
+
