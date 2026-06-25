@@ -475,10 +475,56 @@ connector_result_t connector_cancel(uint64_t operation_id)
 
 connector_result_t connector_wait_all(uint32_t timeout_ms)
 {
-    uint64_t deadline = internal_now_ms() + timeout_ms;
-    (void)deadline;
-    /* TODO: Implement proper wait-all with timeout */
-    return CONNECTOR_SUCCESS;
+    return connector_wait_all_ex(timeout_ms, NULL);
+}
+
+connector_result_t connector_wait_all_ex(uint32_t timeout_ms, connector_wait_result_t *result)
+{
+    uint64_t deadline;
+    int unfinished;
+
+    if (!g_ctx.initialized) {
+        return CONNECTOR_ERROR_NOT_INIT;
+    }
+
+    deadline = internal_now_ms() + timeout_ms;
+
+    /* Poll until queue drains or deadline expires. */
+    for (;;) {
+        pthread_mutex_lock(&g_ctx.queue.mutex);
+        unfinished = g_ctx.queue.count;
+        pthread_mutex_unlock(&g_ctx.queue.mutex);
+
+        if (unfinished == 0) {
+            break;
+        }
+
+        if (timeout_ms > 0 && internal_now_ms() >= deadline) {
+            break;
+        }
+
+        /* Sleep briefly to avoid busy-spinning. */
+        usleep(1000); /* 1 ms */
+    }
+
+    /* Count final state. */
+    pthread_mutex_lock(&g_ctx.queue.mutex);
+    unfinished = g_ctx.queue.count;
+    pthread_mutex_unlock(&g_ctx.queue.mutex);
+
+    if (result != NULL) {
+        /* Estimate total_pending from stats: operations that were in the
+         * queue at call time = current queue + operations that drained
+         * during the wait. We approximate total_pending as the sum of
+         * completed operations during this wait cycle plus remaining. */
+        result->total_pending = (g_ctx.stats.total_operations - g_ctx.stats.failed_operations)
+                                + unfinished;
+        result->completed = result->total_pending - unfinished;
+        result->unfinished = (uint32_t)unfinished;
+        result->all_completed = (unfinished == 0) ? 1 : 0;
+    }
+
+    return (unfinished == 0) ? CONNECTOR_SUCCESS : CONNECTOR_ERROR_TIMEOUT;
 }
 
 connector_buffer_t *connector_buffer_alloc(uint64_t size)
