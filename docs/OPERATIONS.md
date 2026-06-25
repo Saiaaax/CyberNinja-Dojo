@@ -1,4 +1,4 @@
-# Operations Guide
+﻿# Operations Guide
 
 > WARNING: This operations guide is a LEGACY document. It was last updated
 > when the system was running on bare-metal servers in a colocation facility.
@@ -139,6 +139,28 @@ During an incident, use the following channels:
 Backups are verified weekly by restoring to a staging environment and running
 integrity checks. The verification process takes approximately 4 hours for a
 full database restore. The verification results are posted to `#ops-backups`.
+
+## Diagnostic Artifact Gate
+
+Build diagnostics are committed under `diagnostic/` as
+`build-<commit>.logd`, optional `build-<commit>-partNNN.logd` chunks, and
+`build-<commit>.json`. CI jobs can fail early when older diagnostic artifacts
+are accidentally left in a branch:
+
+```sh
+python3 build.py --check-stale
+```
+
+The check is read-only. It reports any diagnostic artifacts that do not match
+the current commit and exits with status 1 when their total size is greater
+than the allowed threshold. By default, `--max-stale-bytes` is `0`, so any
+stale diagnostic byte fails the gate:
+
+```sh
+python3 build.py --check-stale --max-stale-bytes 1048576
+```
+
+Use `python3 build.py --clean` when stale artifacts should be removed locally.
 
 TODO: The backup verification process is partially automated. The restore is
 automated but the integrity checks require manual review. The manual review
@@ -310,3 +332,4 @@ Audit logs are retained for 365 days and include:
 2. Update Kubernetes secret: `kubectl create secret tls tot-tls --cert=new.crt --key=new.key -n tent-production --dry-run=client -o yaml | kubectl apply -f -`
 3. Restart services: `kubectl rollout restart deployment -n tent-production`
 4. Verify new certificate: `openssl s_client -connect api.example.com:443 -servername api.example.com`
+
