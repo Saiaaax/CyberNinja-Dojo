@@ -812,6 +812,32 @@ def print_summary(results: list[tuple[str, bool, float, str, Optional[str]]]):
           f"{color(str(failed) + ' failed', Colors.RED)}, "
           f"{total_time:.1f}s total")
 
+def check_stale_artifacts(max_bytes: int = 0) -> bool:
+    """
+    Return False if stale diagnostic artifacts exist and exceed max_bytes, True otherwise.
+    Stale artifacts are those in DIAGNOSTIC_DIR that do not match the current commit ID.
+    """
+    if not DIAGNOSTIC_DIR.exists():
+        return True
+    
+    commit_id = current_commit_id()
+    stale_files = []
+    total_stale_size = 0
+    
+    for f in DIAGNOSTIC_DIR.iterdir():
+        if f.is_file() and (f.suffix == ".logd" or f.suffix == ".json"):
+            if commit_id not in f.name:
+                stale_files.append(f)
+                total_stale_size += f.stat().st_size
+    
+    if not stale_files:
+        return True
+    
+    if total_stale_size > max_bytes:
+        return False
+    
+    return True
+
 def main():
     parser = argparse.ArgumentParser(
         description="Tent of Trials  -  Multi-Language Build System",
@@ -847,11 +873,22 @@ Diagnostic bundle:
         help="Show detailed build output",
     )
     parser.add_argument(
-        "--list", action="store_true",
-        help="List available modules and exit",
+        "--check-stale", action="store_true",
+        help="Exit non-zero if stale diagnostic artifacts exist",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Byte threshold for stale artifacts (default 0 = any stale is error)",
     )
 
     args = parser.parse_args()
+
+    if args.check_stale:
+        if not check_stale_artifacts(args.max_stale_bytes):
+            print(f"  {color('✗ Stale artifacts found', Colors.RED)}")
+            return 1
+        print(f"  {color('✓ No stale artifacts', Colors.GREEN)}")
+        return 0
 
     print(f"\n  {color('Tent of Trials: building', Colors.CYAN)}")
     print(f"  Working directory: {ROOT}")
