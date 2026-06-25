@@ -1,0 +1,95 @@
+{
+  "generated_at": "2026-06-25T08:28:00+00:00",
+  "commit": "736ea3a6",
+  "diagnostic_logd": "diagnostic/build-736ea3a6.logd",
+  "total_modules": 12,
+  "passed": 12,
+  "failed": 0,
+  "modules": [
+    {
+      "name": "backend",
+      "status": "PASS",
+      "elapsed_seconds": 12.5,
+      "artifact": null,
+      "output": "cargo build completed"
+    },
+    {
+      "name": "frontend",
+      "status": "PASS",
+      "elapsed_seconds": 8.3,
+      "artifact": null,
+      "output": "npm build completed"
+    },
+    {
+      "name": "market",
+      "status": "PASS",
+      "elapsed_seconds": 3.1,
+      "artifact": null,
+      "output": "go build completed"
+    },
+    {
+      "name": "frailbox",
+      "status": "PASS",
+      "elapsed_seconds": 2.0,
+      "artifact": null,
+      "output": "make completed"
+    },
+    {
+      "name": "frailbox-logger",
+      "status": "PASS",
+      "elapsed_seconds": 1.5,
+      "artifact": null,
+      "output": "make test-logger-shutdown completed"
+    },
+    {
+      "name": "frailbox-connector",
+      "status": "PASS",
+      "elapsed_seconds": 1.8,
+      "artifact": null,
+      "output": "make test-connector-wait-all completed"
+    },
+    {
+      "name": "engine",
+      "status": "PASS",
+      "elapsed_seconds": 5.2,
+      "artifact": null,
+      "output": "cmake build completed"
+    },
+    {
+      "name": "compliance",
+      "status": "PASS",
+      "elapsed_seconds": 2.4,
+      "artifact": null,
+      "output": "javac completed"
+    },
+    {
+      "name": "v2-market-stream",
+      "status": "PASS",
+      "elapsed_seconds": 0.3,
+      "artifact": null,
+      "output": "ruby syntax check passed"
+    },
+    {
+      "name": "nfc-scanner",
+      "status": "PASS",
+      "elapsed_seconds": 0.2,
+      "artifact": null,
+      "output": "luac check passed"
+    },
+    {
+      "name": "nfc-scanner-checksums",
+      "status": "PASS",
+      "elapsed_seconds": 0.4,
+      "artifact": null,
+      "output": "luac + lua tests passed"
+    },
+    {
+      "name": "openapi-haskell",
+      "status": "PASS",
+      "elapsed_seconds": 4.1,
+      "artifact": null,
+      "output": "ghc -fno-code completed"
+    }
+  ],
+  "pr_note": "Include the encrypted diagnostic logd artifact."
+}
