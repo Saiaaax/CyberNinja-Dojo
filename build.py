@@ -6,6 +6,7 @@ import getpass
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -812,6 +813,52 @@ def print_summary(results: list[tuple[str, bool, float, str, Optional[str]]]):
           f"{color(str(failed) + ' failed', Colors.RED)}, "
           f"{total_time:.1f}s total")
 
+
+def _get_commit_from_filename(filename: str) -> Optional[str]:
+    """Extract commit ID (8 hex chars) from a diagnostic filename.
+
+    Examples:
+        build-0f9ce9bb.logd -> 0f9ce9bb
+        build-11b17016-part001.logd -> 11b17016
+        build-8206e3c5.json -> 8206e3c5
+    """
+    match = re.match(r"build-([0-9a-f]{8})", filename)
+    return match.group(1) if match else None
+
+
+def _list_diagnostic_artifacts(diagnostic_dir: Path) -> list[Path]:
+    """Return all diagnostic artifact files in the diagnostic directory."""
+    if not diagnostic_dir.exists():
+        return []
+    artifacts = []
+    for candidate in diagnostic_dir.glob("build-????????*"):
+        name = candidate.name
+        if re.match(r"^build-[0-9a-f]{8}(-part\d+)?\.(logd|json)$", name):
+            artifacts.append(candidate)
+    return sorted(set(artifacts))
+
+
+def _find_stale_artifacts(
+    diagnostic_dir: Path,
+    current_commit: str,
+) -> tuple:
+    """Find diagnostic artifacts not belonging to the current commit.
+
+    Returns:
+        Tuple of (list of stale artifact paths, total stale bytes)
+    """
+    artifacts = _list_diagnostic_artifacts(diagnostic_dir)
+    stale = []
+    total_bytes = 0
+    for artifact in artifacts:
+        commit = _get_commit_from_filename(artifact.name)
+        if commit is None or commit != current_commit:
+            size = artifact.stat().st_size
+            total_bytes += size
+            stale.append(artifact)
+    return stale, total_bytes
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Tent of Trials  -  Multi-Language Build System",
@@ -849,6 +896,16 @@ Diagnostic bundle:
     parser.add_argument(
         "--list", action="store_true",
         help="List available modules and exit",
+    )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Check for stale (non-current-commit) diagnostic artifacts and exit non-zero if found. "
+             "Read-only; does not delete any artifacts.",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Byte threshold for --check-stale. Default 0 = any stale artifact is an error. "
+             ">0 = only error if total stale bytes exceed this value.",
     )
 
     args = parser.parse_args()
@@ -911,6 +968,29 @@ Diagnostic bundle:
                 print(f"  {color('▸', Colors.YELLOW)} Removed {artifact.relative_to(ROOT)}")
         print(f"\n  {color('Clean complete.', Colors.GREEN)}")
         return 0
+
+    # --check-stale: scan for outdated diagnostic artifacts without building
+    if args.check_stale:
+        commit_id = current_commit_id()
+        stale, total_bytes = _find_stale_artifacts(DIAGNOSTIC_DIR, commit_id)
+        if not stale:
+            print(f"\n  {color('✓', Colors.GREEN)} No stale diagnostic artifacts (current commit: {commit_id})")
+            return 0
+        print(f"\n  {color('Found', Colors.YELLOW)} {len(stale)} stale diagnostic artifact(s):")
+        for artifact in stale:
+            size_kb = artifact.stat().st_size / 1024
+            artifact_commit = _get_commit_from_filename(artifact.name) or "unknown"
+            print(f"    {artifact.name} ({size_kb:.1f} KiB) [commit: {artifact_commit}]")
+        print(f"  Total stale bytes: {total_bytes} ({total_bytes / 1024:.1f} KiB)")
+        if args.max_stale_bytes == 0:
+            print(f"  {color('✗', Colors.RED)} Stale artifacts found (--max-stale-bytes=0, any stale = error)")
+            return 1
+        elif total_bytes > args.max_stale_bytes:
+            print(f"  {color('✗', Colors.RED)} Total stale bytes ({total_bytes}) exceeds --max-stale-bytes ({args.max_stale_bytes})")
+            return 1
+        else:
+            print(f"  {color('✓', Colors.GREEN)} Total stale bytes ({total_bytes}) within limit ({args.max_stale_bytes})")
+            return 0
 
     print(f"\n  {color('Checking encryptly diagnostics...', Colors.GRAY)}")
     encryptly_start = time.time()
