@@ -47,6 +47,80 @@ def diagnostic_paths_for_commit() -> tuple[Path, Path, str]:
     return logd_path, metadata_path, commit_id
 
 
+def diagnostic_artifact_patterns() -> list[str]:
+    return [
+        "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].logd",
+        "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-part*.logd",
+        "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].json",
+        "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-metadata.json",
+    ]
+
+
+def list_diagnostic_artifacts(diagnostic_dir: Optional[Path] = None) -> list[Path]:
+    diagnostic_dir = diagnostic_dir or DIAGNOSTIC_DIR
+    if not diagnostic_dir.exists():
+        return []
+    artifacts: list[Path] = []
+    for pattern in diagnostic_artifact_patterns():
+        artifacts.extend(diagnostic_dir.glob(pattern))
+    return sorted(set(artifacts))
+
+
+def list_stale_diagnostic_artifacts(
+    current_commit: Optional[str] = None,
+    diagnostic_dir: Optional[Path] = None,
+) -> list[Path]:
+    diagnostic_dir = diagnostic_dir or DIAGNOSTIC_DIR
+    current_commit = current_commit or current_commit_id()
+    current_prefix = f"build-{current_commit}"
+    return [
+        artifact
+        for artifact in list_diagnostic_artifacts(diagnostic_dir)
+        if not artifact.name.startswith(current_prefix)
+    ]
+
+
+def stale_diagnostic_size(paths: list[Path]) -> int:
+    total = 0
+    for path in paths:
+        if path.exists() and path.is_file():
+            total += path.stat().st_size
+    return total
+
+
+def display_path(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def check_stale_diagnostics(max_stale_bytes: int = 0) -> int:
+    stale = list_stale_diagnostic_artifacts()
+    total_bytes = stale_diagnostic_size(stale)
+
+    if not stale:
+        print(f"  {color('✓ No stale diagnostic artifacts found', Colors.GREEN)}")
+        return 0
+
+    print(f"  {color('Stale diagnostic artifacts:', Colors.YELLOW)} {len(stale)} file(s), {total_bytes} bytes")
+    for artifact in stale:
+        print(f"    {display_path(artifact)}")
+
+    if max_stale_bytes == 0 or total_bytes > max_stale_bytes:
+        print(
+            f"  {color('✗ Stale diagnostic artifact budget exceeded', Colors.RED)} "
+            f"(max {max_stale_bytes} bytes)"
+        )
+        return 1
+
+    print(
+        f"  {color('✓ Stale diagnostic artifacts within budget', Colors.GREEN)} "
+        f"({total_bytes}/{max_stale_bytes} bytes)"
+    )
+    return 0
+
+
 def split_diagnostic_logd(logd_path: Path, chunk_size: int = DIAGNOSTIC_CHUNK_SIZE) -> list[Path]:
     """Split an oversized .logd into numbered .logd chunks and remove the original."""
     if logd_path.stat().st_size <= chunk_size:
@@ -850,6 +924,16 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Exit non-zero when stale diagnostic artifacts from older commits are present",
+    )
+    parser.add_argument(
+        "--max-stale-bytes",
+        type=int,
+        default=0,
+        help="Allowed stale diagnostic artifact bytes before --check-stale fails (default: 0)",
+    )
 
     args = parser.parse_args()
 
@@ -864,6 +948,9 @@ Diagnostic bundle:
             print(f"      dir: {m.dir.relative_to(ROOT)}")
             print(f"      build: {' '.join(m.build_cmd)}")
         return 0
+
+    if args.check_stale:
+        return check_stale_diagnostics(args.max_stale_bytes)
 
     print(f"  {color('Checking prerequisites...', Colors.GRAY)}")
     missing = check_prerequisites()
@@ -897,11 +984,7 @@ Diagnostic bundle:
             clean_module(module, args.verbose)
 
         diagnostic_artifacts = [ROOT / "build.logd"]
-        if DIAGNOSTIC_DIR.exists():
-            diagnostic_artifacts.extend(DIAGNOSTIC_DIR.glob("build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].logd"))
-            diagnostic_artifacts.extend(DIAGNOSTIC_DIR.glob("build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-part*.logd"))
-            diagnostic_artifacts.extend(DIAGNOSTIC_DIR.glob("build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].json"))
-            diagnostic_artifacts.extend(DIAGNOSTIC_DIR.glob("build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-metadata.json"))
+        diagnostic_artifacts.extend(list_diagnostic_artifacts())
         for artifact in diagnostic_artifacts:
             if artifact.exists():
                 if artifact.is_dir():

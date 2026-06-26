@@ -123,6 +123,28 @@ During an incident, use the following channels:
 
 ## Backup and Recovery
 
+## Diagnostic Artifact CI Gate
+
+`build.py --check-stale` provides a read-only CI gate for diagnostic artifacts.
+It scans `diagnostic/` for `build-<commit>.logd`, chunked `.logd`, JSON, and
+metadata files whose commit prefix does not match the current `HEAD`.
+
+By default, any stale artifact fails the command:
+
+```sh
+python3 build.py --check-stale
+```
+
+Use `--max-stale-bytes` when a pipeline wants to allow a small known stale
+budget while still failing on larger accidental diagnostic carryover:
+
+```sh
+python3 build.py --check-stale --max-stale-bytes 4096
+```
+
+The check never deletes files. Run `python3 build.py --clean` when stale
+diagnostics should be removed before rebuilding.
+
 ### Backup Schedule
 
 | Data | Frequency | Retention | Type |
