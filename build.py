@@ -93,7 +93,7 @@ MODULES = [
         name="frontend",
         language="TypeScript",
         dir=ROOT / "frontend",
-        build_cmd=["npm", "run", "build"],
+        build_cmd=["npm.cmd", "run", "build"] if os.name == "nt" else ["npm", "run", "build"],
         clean_cmd=["rm", "-rf", "node_modules", "dist"],
         build_dir=ROOT / "frontend" / "dist",
         env={"NODE_ENV": "production"},
@@ -357,7 +357,7 @@ def build_module(
             print(f"       {color('npm install...', Colors.GRAY)}")
             try:
                 install_result = subprocess.run(
-                    ["npm", "install"],
+                    ["npm.cmd" if os.name == "nt" else "npm", "install"],
                     cwd=str(module.dir),
                     capture_output=not verbose,
                     text=True,
