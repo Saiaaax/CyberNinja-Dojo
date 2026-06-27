@@ -850,8 +850,60 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Check if any older (non-current-commit) diagnostic artifacts exist and exit non-zero",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Byte threshold of stale artifacts allowed before failing (default: 0)",
+    )
 
     args = parser.parse_args()
+
+    if args.check_stale:
+        commit_id = current_commit_id()
+        stale_files = []
+        total_stale_bytes = 0
+        if DIAGNOSTIC_DIR.exists() and DIAGNOSTIC_DIR.is_dir():
+            for path in DIAGNOSTIC_DIR.iterdir():
+                if not path.is_file():
+                    continue
+                name = path.name
+                is_diag = False
+                file_commit = None
+                if name.startswith("build-"):
+                    if name.endswith(".json"):
+                        is_diag = True
+                        file_commit = name[6:-5]
+                    elif name.endswith(".logd"):
+                        is_diag = True
+                        rem = name[6:-5]
+                        if "-part" in rem:
+                            file_commit = rem.split("-part")[0]
+                        else:
+                            file_commit = rem
+                if is_diag and file_commit != commit_id:
+                    stale_files.append(path)
+                    total_stale_bytes += path.stat().st_size
+        
+        if total_stale_bytes > args.max_stale_bytes:
+            print(f"  {color('✗ Stale diagnostic artifacts found:', Colors.RED)}")
+            for path in stale_files:
+                try:
+                    rel_path = path.relative_to(ROOT)
+                except ValueError:
+                    rel_path = path.name
+                print(f"    - {rel_path} ({path.stat().st_size} bytes)")
+            print(f"  Total stale bytes: {total_stale_bytes} (threshold: {args.max_stale_bytes})")
+            return 1
+        else:
+            if stale_files:
+                print(f"  {color('✓ Stale diagnostic artifacts within threshold:', Colors.GREEN)}")
+                print(f"    Total stale bytes: {total_stale_bytes} (threshold: {args.max_stale_bytes})")
+            else:
+                print(f"  {color('✓ No stale diagnostic artifacts found', Colors.GREEN)}")
+            return 0
 
     print(f"\n  {color('Tent of Trials: building', Colors.CYAN)}")
     print(f"  Working directory: {ROOT}")

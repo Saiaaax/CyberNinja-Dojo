@@ -85,6 +85,20 @@ Alerts are sent to PagerDuty and Slack (#ops-alerts channel).
 | DBConnectionPool | Pool exhaustion risk | Critical | 10 minutes |
 | QueueBacklog | Queue depth > 10000 for 5 minutes | Warning | 15 minutes |
 
+### Telemetry Collection
+
+The frontend application includes a client-side telemetry service (`frontend/src/services/telemetry.ts`) to monitor and collect client-side performance, errors, and feature usage.
+
+- **Transport Protocols**: Automatically selects the most optimized transport method supported by the browser, in order: `Beacon API` > `Fetch API` > `XHR`.
+- **Batching & Buffering**: To reduce network requests, telemetry events are buffered client-side. A flush is triggered when:
+  1. The event queue reaches the batch threshold (default **100 events**).
+  2. The page is about to unload (triggers flush on `beforeunload` or visibility state changes).
+- **Error Recovery & Durability**:
+  - If a flush request fails (due to network dropouts or backend errors), the telemetry service preserves the unsent batch by prepending it back onto the event queue.
+  - The service retries the flush up to 3 times before dropping the oldest events, preventing infinite queue growth.
+  - After a successful flush, the event buffer and retry statistics are reset.
+- **Verification**: Verified via native Node unit tests in `frontend/scripts/test-telemetry.mjs`.
+
 ## Incident Response
 
 ### Severity Levels
@@ -310,3 +324,25 @@ Audit logs are retained for 365 days and include:
 2. Update Kubernetes secret: `kubectl create secret tls tot-tls --cert=new.crt --key=new.key -n tent-production --dry-run=client -o yaml | kubectl apply -f -`
 3. Restart services: `kubectl rollout restart deployment -n tent-production`
 4. Verify new certificate: `openssl s_client -connect api.example.com:443 -servername api.example.com`
+
+## Diagnostic Artifact Management
+
+The system produces encrypted build diagnostics under the `diagnostic/` directory using the `build.py` script. To prevent shipping stale or outdated diagnostics in PRs, the build tool includes CI gating flags:
+
+### Checking for Stale Artifacts
+
+Stale artifacts are defined as diagnostic files (like `.logd` and `.json`) that do not match the current commit ID.
+
+To run a CI gate check:
+```bash
+python3 build.py --check-stale
+```
+This command exits non-zero (1) if any stale diagnostic artifacts exist.
+
+### Configuring a Byte Threshold
+
+If some stale artifacts are acceptable (e.g. minor logs), you can configure a byte threshold:
+```bash
+python3 build.py --check-stale --max-stale-bytes 1048576  # Allow up to 1MB of stale logs
+```
+This command exits 1 only if the combined size of all stale artifacts exceeds the specified threshold.
