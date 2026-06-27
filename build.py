@@ -824,6 +824,8 @@ Examples:
   python3 build.py --clean            Clean all artifacts
   python3 build.py --release          Release build (Rust only)
   python3 build.py --verbose          Verbose output
+  python3 build.py --check-stale      CI gate: fail if stale artifacts exist
+  python3 build.py --check-stale --max-stale-bytes 1024  Allow up to 1KB of stale
 
 Diagnostic bundle:
   python3 build.py
@@ -850,8 +852,40 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Exit non-zero if stale (non-current-commit) diagnostic artifacts exist. CI gate.",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Maximum total bytes of stale artifacts allowed before --check-stale fails (default: 0 = any stale is error).",
+    )
 
     args = parser.parse_args()
+
+    if args.check_stale:
+        current_commit = current_commit_id()
+        stale_artifacts: list[Path] = []
+        stale_bytes = 0
+        if DIAGNOSTIC_DIR.exists():
+            for artifact in DIAGNOSTIC_DIR.iterdir():
+                if artifact.is_file() and artifact.name.startswith("build-"):
+                    # Extract commit ID from filename: build-XXXXXXXX.logd or build-XXXXXXXX.json
+                    parts = artifact.name.split("-")
+                    if len(parts) >= 2:
+                        artifact_commit = parts[1].split(".")[0].split("-")[0]
+                        if artifact_commit != current_commit and artifact_commit != "00000000":
+                            stale_artifacts.append(artifact)
+                            stale_bytes += artifact.stat().st_size
+        if stale_bytes > args.max_stale_bytes:
+            print(f"  {color('✗ CI gate failed:', Colors.RED)} {len(stale_artifacts)} stale artifact(s) "
+                  f"({stale_bytes} bytes > {args.max_stale_bytes} byte threshold)")
+            for a in stale_artifacts:
+                print(f"    {color('▸', Colors.RED)} {a.relative_to(ROOT)}")
+            return 1
+        else:
+            print(f"  {color('✓ CI gate passed:', Colors.GREEN)} no stale artifacts exceed threshold")
+            return 0
 
     print(f"\n  {color('Tent of Trials: building', Colors.CYAN)}")
     print(f"  Working directory: {ROOT}")
