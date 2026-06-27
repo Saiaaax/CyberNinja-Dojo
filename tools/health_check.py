@@ -149,7 +149,7 @@ def check_disk_usage(path: str = "/") -> Tuple[str, str, float]:
         return "WARNING", f"Cannot check: {e}", 0
 
 
-def check_memory_usage() -> Tuple[str, str, float]:
+def _check_memory_linux() -> Optional[Tuple[str, str, float]]:
     try:
         with open("/proc/meminfo") as f:
             meminfo = {}
@@ -174,11 +174,86 @@ def check_memory_usage() -> Tuple[str, str, float]:
             return "WARNING", f"{pct:.1f}% used", pct
         else:
             return "CRITICAL", f"{pct:.1f}% used", pct
-    except Exception as e:
-        return "WARNING", f"Cannot check: {e}", 0
+    except Exception:
+        return None
 
 
-def check_load_average() -> Tuple[str, str, float]:
+def _check_memory_psutil() -> Optional[Tuple[str, str, float]]:
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        pct = mem.percent
+        used_gb = mem.used / (1024 ** 3)
+        total_gb = mem.total / (1024 ** 3)
+
+        if pct < MEMORY_THRESHOLD_WARNING:
+            return "OK", f"{pct:.1f}% used ({used_gb:.1f}GB/{total_gb:.1f}GB)", pct
+        elif pct < MEMORY_THRESHOLD_CRITICAL:
+            return "WARNING", f"{pct:.1f}% used", pct
+        else:
+            return "CRITICAL", f"{pct:.1f}% used", pct
+    except Exception:
+        return None
+
+
+def _check_memory_platform() -> Tuple[str, str, float]:
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["sysctl", "-n", "hw.memsize"],
+            capture_output=True, text=True, timeout=5
+        )
+        total = int(result.stdout.strip())
+
+        result = subprocess.run(
+            ["vm_stat"],
+            capture_output=True, text=True, timeout=5
+        )
+        lines = result.stdout.strip().split("\n")
+        page_size = 4096
+        for line in lines:
+            if "page size of" in line:
+                page_size = int(line.split()[-2])
+                break
+
+        free_pages = 0
+        inactive_pages = 0
+        speculative_pages = 0
+        for line in lines[1:]:
+            if line.startswith("Pages free"):
+                free_pages = int(line.split()[-1].rstrip("."))
+            elif line.startswith("Pages inactive"):
+                inactive_pages = int(line.split()[-1].rstrip("."))
+            elif line.startswith("Pages speculative"):
+                speculative_pages = int(line.split()[-1].rstrip("."))
+
+        available = (free_pages + inactive_pages + speculative_pages) * page_size
+        used = total - available
+        pct = (used / total) * 100 if total > 0 else 0
+
+        if pct < MEMORY_THRESHOLD_WARNING:
+            return "OK", f"{pct:.1f}% used ({used // (1024**3)}GB/{total // (1024**3)}GB)", pct
+        elif pct < MEMORY_THRESHOLD_CRITICAL:
+            return "WARNING", f"{pct:.1f}% used", pct
+        else:
+            return "CRITICAL", f"{pct:.1f}% used", pct
+    except Exception:
+        return "WARNING", "Cannot check memory: no fallback available", 0
+
+
+def check_memory_usage() -> Tuple[str, str, float]:
+    result = _check_memory_linux()
+    if result is not None:
+        return result
+
+    result = _check_memory_psutil()
+    if result is not None:
+        return result
+
+    return _check_memory_platform()
+
+
+def _check_load_linux() -> Optional[Tuple[str, str, float]]:
     try:
         with open("/proc/loadavg") as f:
             parts = f.read().strip().split()
@@ -192,8 +267,36 @@ def check_load_average() -> Tuple[str, str, float]:
                 return "WARNING", f"Load: {load} ({load_pct:.0f}% of {cpu_count} cores)", load
             else:
                 return "CRITICAL", f"Load: {load} ({load_pct:.0f}% of {cpu_count} cores)", load
-    except Exception as e:
-        return "WARNING", f"Cannot check: {e}", 0
+    except Exception:
+        return None
+
+
+def _check_load_getloadavg() -> Optional[Tuple[str, str, float]]:
+    try:
+        load1, load5, load15 = os.getloadavg()
+        cpu_count = os.cpu_count() or 1
+        load_pct = (load1 / cpu_count) * 100
+
+        if load_pct < 70:
+            return "OK", f"Load: {load1} ({load_pct:.0f}% of {cpu_count} cores)", load1
+        elif load_pct < 90:
+            return "WARNING", f"Load: {load1} ({load_pct:.0f}% of {cpu_count} cores)", load1
+        else:
+            return "CRITICAL", f"Load: {load1} ({load_pct:.0f}% of {cpu_count} cores)", load1
+    except Exception:
+        return None
+
+
+def check_load_average() -> Tuple[str, str, float]:
+    result = _check_load_linux()
+    if result is not None:
+        return result
+
+    result = _check_load_getloadavg()
+    if result is not None:
+        return result
+
+    return "WARNING", "Cannot check load average: no fallback available", 0
 
 
 # ---------------------------------------------------------------------------
