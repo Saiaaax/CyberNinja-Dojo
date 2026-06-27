@@ -1,0 +1,115 @@
+{
+  "generated_at": "2026-06-27T21:13:58.501750+00:00",
+  "commit": "0ce2e996",
+  "diagnostic_logd": "diagnostic/build-0ce2e996.logd",
+  "diagnostic_logd_error": null,
+  "message_blocker": null,
+  "chunked": false,
+  "chunk_size_bytes": null,
+  "password": "b2e6a9c0d13e8573e890",
+  "decrypt_command": "encryptly unpack diagnostic/build-0ce2e996.logd <outdir> --password b2e6a9c0d13e8573e890",
+  "total_modules": 14,
+  "passed": 1,
+  "failed": 13,
+  "modules": [
+    {
+      "name": "backend",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/backend'"
+    },
+    {
+      "name": "frontend",
+      "status": "FAIL",
+      "elapsed_seconds": 11.923,
+      "artifact": null,
+      "output": "> tent-frontend@0.0.0 build\n> tsc -b && vite build\n\nsrc/App.tsx(3,20): error TS2307: Cannot find module './components/Layout' or its corresponding type declarations.\nsrc/App.tsx(4,23): error TS2307: Cannot find module './pages/Dashboard' or its corresponding type declarations.\nsrc/App.tsx(5,23): error TS2307: Cannot find module './pages/Analytics' or its corresponding type declarations.\nsrc/App.tsx(6,22): error TS2307: Cannot find module './pages/Settings' or its corresponding type declarations."
+    },
+    {
+      "name": "market",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/market'"
+    },
+    {
+      "name": "frailbox",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/frailbox'"
+    },
+    {
+      "name": "frailbox-logger",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/frailbox'"
+    },
+    {
+      "name": "frailbox-connector",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/frailbox'"
+    },
+    {
+      "name": "engine",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/frailbox/engine'"
+    },
+    {
+      "name": "compliance",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/compliance'"
+    },
+    {
+      "name": "v2-market-stream",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/v2/services'"
+    },
+    {
+      "name": "nfc-scanner",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/frailbox/nfc'"
+    },
+    {
+      "name": "nfc-scanner-checksums",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/frailbox/nfc'"
+    },
+    {
+      "name": "openapi-haskell",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/docs/openapi'"
+    },
+    {
+      "name": "openapi-tools",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: 'luac'"
+    },
+    {
+      "name": "legacy-migration",
+      "status": "PASS",
+      "elapsed_seconds": 0.061,
+      "artifact": null,
+      "output": ""
+    }
+  ],
+  "pr_note": "Include the encrypted diagnostic logd artifact(s): diagnostic/build-0ce2e996.logd. The encrypted .logd is the required diagnostic content for PR review; this JSON file is metadata. Maintainers may ask you to remove these diagnostic artifacts before merging."
+}
