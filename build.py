@@ -638,6 +638,14 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Exit 1 if older diagnostic artifacts exist (CI gate)",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Max stale bytes allowed before --check-stale fails (default: 0 = any stale is an error)",
+    )
 
     args = parser.parse_args()
 
@@ -651,6 +659,40 @@ Diagnostic bundle:
             print(f"    {color(m.name, Colors.CYAN)} ({m.language})")
             print(f"      dir: {m.dir.relative_to(ROOT)}")
             print(f"      build: {' '.join(m.build_cmd)}")
+        return 0
+
+    if args.check_stale:
+        commit_id = current_commit_id()
+        stale_total = 0
+        stale_files = []
+
+        if DIAGNOSTIC_DIR.exists():
+            for pattern in [
+                "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].logd",
+                "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-part*.logd",
+                "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].json",
+                "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-metadata.json",
+            ]:
+                for artifact in DIAGNOSTIC_DIR.glob(pattern):
+                    name = artifact.name
+                    if commit_id not in name:
+                        size = artifact.stat().st_size if artifact.is_file() else 0
+                        stale_total += size
+                        stale_files.append((artifact, size))
+
+        if stale_files:
+            if args.max_stale_bytes > 0 and stale_total <= args.max_stale_bytes:
+                print(f"  {color('✓ Stale artifacts within threshold', Colors.GREEN)} "
+                      f"({stale_total} bytes <= {args.max_stale_bytes} bytes)")
+                return 0
+
+            print(f"  {color('✗ Stale diagnostic artifacts detected', Colors.RED)}")
+            for path, size in stale_files:
+                print(f"    {path.relative_to(ROOT)} ({size} bytes)")
+            print(f"  Total stale: {stale_total} bytes across {len(stale_files)} file(s)")
+            return 1
+
+        print(f"  {color('✓ No stale diagnostic artifacts', Colors.GREEN)}")
         return 0
 
     print(f"  {color('Checking prerequisites...', Colors.GRAY)}")
