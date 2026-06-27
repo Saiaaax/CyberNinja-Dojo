@@ -310,3 +310,35 @@ Audit logs are retained for 365 days and include:
 2. Update Kubernetes secret: `kubectl create secret tls tot-tls --cert=new.crt --key=new.key -n tent-production --dry-run=client -o yaml | kubectl apply -f -`
 3. Restart services: `kubectl rollout restart deployment -n tent-production`
 4. Verify new certificate: `openssl s_client -connect api.example.com:443 -servername api.example.com`
+
+## CI Gating with --check-stale
+
+The `build.py` script supports a `--check-stale` flag for CI pipelines. This flag
+exits with a non-zero code if stale (non-current-commit) diagnostic artifacts are
+found in the `diagnostic/` directory.
+
+### Usage
+
+```bash
+# Fail if any stale artifacts exist
+python3 build.py --check-stale
+
+# Allow up to 1KB of stale artifacts before failing
+python3 build.py --check-stale --max-stale-bytes 1024
+```
+
+### Behavior
+
+- **Exit 0**: No stale artifacts, or stale artifacts are under the byte threshold
+- **Exit 1**: Stale artifacts exceed the byte threshold (default: 0 = any stale is an error)
+- Artifacts with commit ID `00000000` are ignored (they are pre-build placeholders)
+- The flag is read-only and does not delete any artifacts
+
+### CI Integration
+
+Add this to your CI pipeline after the build step:
+
+```yaml
+- name: Check for stale diagnostic artifacts
+  run: python3 build.py --check-stale
+```
