@@ -15,6 +15,26 @@
 
 ## Monitoring
 
+### Diagnostic Artifact CI Gate
+
+Use the stale diagnostic check before opening a PR to prevent older diagnostic
+bundles from being included accidentally:
+
+```bash
+python3 build.py --check-stale
+```
+
+The command is read-only. It exits with code `1` when any
+`diagnostic/build-*` artifact does not belong to the current commit. To allow a
+small amount of stale diagnostic data during staged migrations, configure an
+explicit byte threshold:
+
+```bash
+python3 build.py --check-stale --max-stale-bytes 1048576
+```
+
+The default threshold is `0`, so any stale diagnostic byte fails the check.
+
 ### Health Check Endpoints
 
 Each service exposes a health check endpoint:
