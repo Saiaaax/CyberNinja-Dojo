@@ -1,0 +1,19 @@
+{
+  "generated_at": "2026-06-28T00:26:52.173494+00:00",
+  "commit": "925403ec",
+  "diagnostic_logd": "diagnostic/build-925403ec.logd",
+  "password": "",
+  "decrypt_command": "encryptly unpack diagnostic/build-925403ec.logd <outdir>",
+  "total_modules": 1,
+  "passed": 1,
+  "failed": 0,
+  "modules": [
+    {
+      "name": "telemetry_service",
+      "status": "PASS",
+      "tests_run": 3,
+      "tests_passed": 3,
+      "tests_failed": 0
+    }
+  ]
+}
