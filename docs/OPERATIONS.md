@@ -113,6 +113,64 @@ python3 -m pytest tests/ -v
   - Metadata file handling
   - Mixed artifact scenarios
 
+- `telemetry.test.ts` - Tests for frontend telemetry batch flush behavior
+  - Module exports verification
+  - Stats structure validation
+  - Config properties check
+  - Enable/disable toggle
+  - Sample rate clamping (0-1)
+
+## Frontend Telemetry
+
+### Batch Flush Behavior
+
+The telemetry service batches events and flushes them to the backend based on multiple triggers:
+
+1. **Batch Size Threshold**: Flushes when queued events reach `batchSize` (default: 100)
+2. **Flush Interval**: Periodic flush every `flushInterval` ms (default: 30000ms / 30s)
+3. **Page Unload**: Flushes on `beforeunload` event using Beacon API
+4. **Visibility Change**: Flushes when page becomes hidden
+
+### Configuration
+
+```typescript
+interface TelemetryConfig {
+  endpoint: string;        // Backend URL (from VITE_TELEMETRY_ENDPOINT)
+  batchSize: number;       // Events per batch (default: 100)
+  flushInterval: number;   // Flush interval in ms (default: 30000)
+  maxRetries: number;      // Retry attempts on failure (default: 3)
+  sampleRate: number;      // Event sampling rate 0-1 (default: 1.0)
+  enabled: boolean;        // Enable/disable telemetry
+  debug: boolean;          // Debug logging
+}
+```
+
+### Running Telemetry Tests
+
+```bash
+# Run telemetry tests
+npm run test:telemetry
+
+# Or directly
+node --experimental-strip-types --test src/services/telemetry.test.ts
+```
+
+### Stats & Monitoring
+
+```typescript
+import { getTelemetryStats } from './services/telemetry';
+
+const stats = getTelemetryStats();
+// {
+//   queued: number,      // Events waiting to be sent
+//   sent: number,        // Total events sent
+//   dropped: number,     // Events dropped (queue full)
+//   errors: number,      // Flush errors
+//   sessionId: string,   // Current session ID
+//   config: { ... }      // Current config
+// }
+```
+
 ## Troubleshooting
 
 ### Stale Artifacts Warning
