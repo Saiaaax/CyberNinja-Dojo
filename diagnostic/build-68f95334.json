@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-06-28T03:40:48.863541+00:00",
+  "commit": "68f95334",
+  "diagnostic_logd": "diagnostic/build-68f95334.logd",
+  "chunked": false,
+  "chunk_size_bytes": null,
+  "password": "4f99cc2b305148fa3a58",
+  "decrypt_command": "encryptly unpack diagnostic/build-68f95334.logd <outdir> --password 4f99cc2b305148fa3a58",
+  "total_modules": 1,
+  "passed": 0,
+  "failed": 1,
+  "modules": [
+    {
+      "name": "frontend",
+      "status": "FAIL",
+      "elapsed_seconds": 0.091,
+      "artifact": null
+    }
+  ],
+  "pr_note": "Include this metadata and diagnostic/build-68f95334.logd in your PR. Maintainers may ask you to remove these diagnostic artifacts before merging."
+}
