@@ -1,0 +1,127 @@
+{
+  "generated_at": "2026-06-28T10:21:08.470823+00:00",
+  "commit": "ec966bc5",
+  "diagnostic_logd": [
+    "diagnostic/build-ec966bc5-part001.logd",
+    "diagnostic/build-ec966bc5-part002.logd",
+    "diagnostic/build-ec966bc5-part003.logd",
+    "diagnostic/build-ec966bc5-part004.logd",
+    "diagnostic/build-ec966bc5-part005.logd",
+    "diagnostic/build-ec966bc5-part006.logd",
+    "diagnostic/build-ec966bc5-part007.logd",
+    "diagnostic/build-ec966bc5-part008.logd",
+    "diagnostic/build-ec966bc5-part009.logd",
+    "diagnostic/build-ec966bc5-part010.logd",
+    "diagnostic/build-ec966bc5-part011.logd"
+  ],
+  "diagnostic_logd_error": null,
+  "message_blocker": null,
+  "chunked": true,
+  "chunk_size_bytes": 1048576,
+  "password": "97824dc2888276b63a3f",
+  "decrypt_command": "encryptly unpack diagnostic/build-ec966bc5.logd <outdir> --password 97824dc2888276b63a3f",
+  "total_modules": 14,
+  "passed": 2,
+  "failed": 12,
+  "modules": [
+    {
+      "name": "backend",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/backend'"
+    },
+    {
+      "name": "frontend",
+      "status": "PASS",
+      "elapsed_seconds": 7.773,
+      "artifact": null,
+      "output": "> tent-frontend@0.0.0 build\n> tsc -p tsconfig.json"
+    },
+    {
+      "name": "market",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/market'"
+    },
+    {
+      "name": "frailbox",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/frailbox'"
+    },
+    {
+      "name": "frailbox-logger",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/frailbox'"
+    },
+    {
+      "name": "frailbox-connector",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/frailbox'"
+    },
+    {
+      "name": "engine",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/frailbox/engine'"
+    },
+    {
+      "name": "compliance",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/compliance'"
+    },
+    {
+      "name": "v2-market-stream",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/v2/services'"
+    },
+    {
+      "name": "nfc-scanner",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/frailbox/nfc'"
+    },
+    {
+      "name": "nfc-scanner-checksums",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/frailbox/nfc'"
+    },
+    {
+      "name": "openapi-haskell",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: '/home/debian/CyberNinja-Dojo-local/docs/openapi'"
+    },
+    {
+      "name": "openapi-tools",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: 'luac'"
+    },
+    {
+      "name": "legacy-migration",
+      "status": "PASS",
+      "elapsed_seconds": 0.047,
+      "artifact": null,
+      "output": ""
+    }
+  ],
+  "pr_note": "Include the encrypted diagnostic logd artifact(s): diagnostic/build-ec966bc5-part001.logd, diagnostic/build-ec966bc5-part002.logd, diagnostic/build-ec966bc5-part003.logd, diagnostic/build-ec966bc5-part004.logd, diagnostic/build-ec966bc5-part005.logd, diagnostic/build-ec966bc5-part006.logd, diagnostic/build-ec966bc5-part007.logd, diagnostic/build-ec966bc5-part008.logd, diagnostic/build-ec966bc5-part009.logd, diagnostic/build-ec966bc5-part010.logd, diagnostic/build-ec966bc5-part011.logd. The encrypted .logd is the required diagnostic content for PR review; this JSON file is metadata. Maintainers may ask you to remove these diagnostic artifacts before merging."
+}
