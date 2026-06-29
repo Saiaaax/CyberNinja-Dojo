@@ -1,0 +1,126 @@
+{
+  "generated_at": "2026-06-29T00:23:30.543344+00:00",
+  "commit": "8e652d00",
+  "diagnostic_logd": [
+    "diagnostic/build-8e652d00-part001.logd",
+    "diagnostic/build-8e652d00-part002.logd",
+    "diagnostic/build-8e652d00-part003.logd",
+    "diagnostic/build-8e652d00-part004.logd",
+    "diagnostic/build-8e652d00-part005.logd",
+    "diagnostic/build-8e652d00-part006.logd",
+    "diagnostic/build-8e652d00-part007.logd",
+    "diagnostic/build-8e652d00-part008.logd",
+    "diagnostic/build-8e652d00-part009.logd",
+    "diagnostic/build-8e652d00-part010.logd"
+  ],
+  "diagnostic_logd_error": null,
+  "message_blocker": null,
+  "chunked": true,
+  "chunk_size_bytes": 16777216,
+  "password": "06ab009e74520e29228f",
+  "decrypt_command": "cat diagnostic/build-8e652d00-part001.logd diagnostic/build-8e652d00-part002.logd diagnostic/build-8e652d00-part003.logd diagnostic/build-8e652d00-part004.logd diagnostic/build-8e652d00-part005.logd diagnostic/build-8e652d00-part006.logd diagnostic/build-8e652d00-part007.logd diagnostic/build-8e652d00-part008.logd diagnostic/build-8e652d00-part009.logd diagnostic/build-8e652d00-part010.logd > diagnostic/build-8e652d00.logd && encryptly unpack diagnostic/build-8e652d00.logd <outdir> --password 06ab009e74520e29228f",
+  "total_modules": 14,
+  "passed": 1,
+  "failed": 13,
+  "modules": [
+    {
+      "name": "backend",
+      "status": "FAIL",
+      "elapsed_seconds": 0.002,
+      "artifact": null,
+      "output": "cargo unavailable in diagnostic environment"
+    },
+    {
+      "name": "frontend",
+      "status": "FAIL",
+      "elapsed_seconds": 0.001,
+      "artifact": null,
+      "output": "npm install failed:\nnpm unavailable in diagnostic environment"
+    },
+    {
+      "name": "market",
+      "status": "FAIL",
+      "elapsed_seconds": 0.003,
+      "artifact": null,
+      "output": "go unavailable in diagnostic environment"
+    },
+    {
+      "name": "frailbox",
+      "status": "FAIL",
+      "elapsed_seconds": 0.001,
+      "artifact": null,
+      "output": "make unavailable in diagnostic environment"
+    },
+    {
+      "name": "frailbox-logger",
+      "status": "FAIL",
+      "elapsed_seconds": 0.001,
+      "artifact": null,
+      "output": "make unavailable in diagnostic environment"
+    },
+    {
+      "name": "frailbox-connector",
+      "status": "FAIL",
+      "elapsed_seconds": 0.001,
+      "artifact": null,
+      "output": "make unavailable in diagnostic environment"
+    },
+    {
+      "name": "engine",
+      "status": "FAIL",
+      "elapsed_seconds": 0.004,
+      "artifact": null,
+      "output": "CMake configure failed:\ncmake unavailable in diagnostic environment"
+    },
+    {
+      "name": "compliance",
+      "status": "FAIL",
+      "elapsed_seconds": 0.003,
+      "artifact": null,
+      "output": "javac unavailable in diagnostic environment"
+    },
+    {
+      "name": "v2-market-stream",
+      "status": "FAIL",
+      "elapsed_seconds": 0.002,
+      "artifact": null,
+      "output": "ruby unavailable in diagnostic environment"
+    },
+    {
+      "name": "nfc-scanner",
+      "status": "FAIL",
+      "elapsed_seconds": 0.002,
+      "artifact": null,
+      "output": "luac unavailable in diagnostic environment"
+    },
+    {
+      "name": "nfc-scanner-checksums",
+      "status": "FAIL",
+      "elapsed_seconds": 0.005,
+      "artifact": null,
+      "output": "sh unavailable in diagnostic environment"
+    },
+    {
+      "name": "openapi-haskell",
+      "status": "FAIL",
+      "elapsed_seconds": 0.004,
+      "artifact": null,
+      "output": "ghc unavailable in diagnostic environment"
+    },
+    {
+      "name": "openapi-tools",
+      "status": "FAIL",
+      "elapsed_seconds": 0.003,
+      "artifact": null,
+      "output": "luac unavailable in diagnostic environment"
+    },
+    {
+      "name": "legacy-migration",
+      "status": "PASS",
+      "elapsed_seconds": 0.283,
+      "artifact": null,
+      "output": "test_missing_backup_returns_structured_error (__main__.DryRunRestoreValidationTest.test_missing_backup_returns_structured_error) ... ok\ntest_schema_mismatch_returns_structured_error (__main__.DryRunRestoreValidationTest.test_schema_mismatch_returns_structured_error) ... ok\ntest_success_reports_rows_checksums_and_does_not_write_target (__main__.DryRunRestoreValidationTest.test_success_reports_rows_checksums_and_does_not_write_target) ... ok\n\n----------------------------------------------------------------------\nRan 3 tests in 0.028s\n\nOK"
+    }
+  ],
+  "pr_note": "Include the encrypted diagnostic logd artifact(s): diagnostic\\build-8e652d00-part001.logd, diagnostic\\build-8e652d00-part002.logd, diagnostic\\build-8e652d00-part003.logd, diagnostic\\build-8e652d00-part004.logd. The encrypted .logd is the required diagnostic content for PR review; this JSON file is metadata. Maintainers may ask you to remove these diagnostic artifacts before merging."
+}
