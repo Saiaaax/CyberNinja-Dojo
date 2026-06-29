@@ -1,19 +1,116 @@
 # Operations Guide
 
-> WARNING: This operations guide is a LEGACY document. It was last updated
+## Table of Contents
+
+- [Telemetry Service](#telemetry-service)
+  - [Batch Flush Behavior](#batch-flush-behavior)
+  - [Flush Triggers](#flush-triggers)
+  - [Threshold Behavior](#threshold-behavior)
+  - [Partial Batch Preservation](#partial-batch-preservation)
+  - [State After Flush](#state-after-flush)
+  - [Running Telemetry Tests](#running-telemetry-tests)
+- [Monitoring](#monitoring)
+- [Incident Response](#incident-response)
+- [Backup and Recovery](#backup-and-recovery)
+- [Database Administration](#database-administration)
+- [Capacity Planning](#capacity-planning)
+- [Security](#security)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Telemetry Service
+
+The telemetry service (`frontend/src/services/telemetry.ts`) collects client-side events and batches them for efficient transmission to the telemetry backend.
+
+### Batch Flush Behavior
+
+The telemetry batch is flushed under three conditions:
+
+1. **Batch Size Threshold** - When the event queue reaches the configured `batchSize` (default: 100 events), an automatic flush is triggered. This is the primary flush mechanism during normal operation.
+
+2. **Page Unload** - When the user navigates away or closes the page, the `beforeunload` event triggers an immediate flush of any remaining events in the queue. This prevents data loss during session termination.
+
+3. **Visibility Change** - When the page becomes hidden (`visibilityState === 'hidden'`), any queued events are flushed. This catches mobile tab switches and browser minimization.
+
+### Flush Triggers
+
+| Trigger | Condition | Behavior |
+|---------|-----------|----------|
+| Batch threshold | Queue size >= 100 events | Automatic flush of exactly 100 events |
+| Page unload | `beforeunload` event fires | Flush all remaining events |
+| Visibility hidden | `visibilitychange` to hidden | Flush all remaining events |
+
+### Threshold Behavior
+
+| Scenario | Queue Size | Action |
+|----------|-----------|--------|
+| Below threshold | 1-99 | Events accumulate in queue |
+| At threshold | 100 | Immediate auto-flush |
+| Above threshold | 101-199 | First 100 flushed, remainder (1-99) kept |
+| Multiple thresholds | 200+ | Multiple 100-event flushes, remainder kept |
+
+### Partial Batch Preservation
+
+When a flush occurs, events are processed in FIFO (first-in-first-out) order:
+
+- A batch of exactly `batchSize` events is extracted from the front of the queue
+- These events are sent to the telemetry endpoint
+- Any remaining events (fewer than `batchSize`) stay in the queue for the next flush cycle
+- Event ordering is preserved across flushes
+
+This ensures that:
+- No events are lost during partial flushes
+- Event ordering is maintained
+- The system degrades gracefully under high load
+
+### State After Flush
+
+After a successful flush:
+
+- **Event queue**: Cleared of the flushed batch
+- **totalEventsSent**: Incremented by the number of events flushed
+- **lastFlushTime**: Updated to the current timestamp
+- **isFlushing**: Reset to `false`
+- **retryCount**: Reset to 0
+
+After a force flush (page unload):
+
+- All remaining events are flushed, regardless of batch size
+- The queue is completely emptied
+- Stats are updated with the final event count
+
+### Running Telemetry Tests
+
+The telemetry flush behavior is covered by unit tests in `frontend/src/services/telemetry.test.ts`.
+
+```bash
+# Using vitest
+npx vitest run frontend/src/services/telemetry.test.ts
+
+# Or with coverage
+npx vitest run --coverage frontend/src/services/telemetry.test.ts
+```
+
+Tests cover:
+- Flush at threshold (100 events)
+- No flush below threshold
+- Multiple flushes for large batches
+- Page unload flush behavior
+- Partial batch preservation
+- State reset after flush
+- Edge cases (0 events, single event, boundary conditions)
+
+---
+
+## Monitoring
+
+> WARNING: This operations guide section is a LEGACY document. It was last updated
 > when the system was running on bare-metal servers in a colocation facility.
 > The system has since been migrated to Kubernetes on AWS EKS. Some of the
 > commands and procedures in this document are specific to the old infrastructure
 > and will not work in the current environment. The Kubernetes-specific operations
 > are documented in the internal wiki under "Kubernetes Operations."
->
-> The migration from bare-metal to Kubernetes was completed in Q2 2023 but
-> this document was never updated because the operations team was busy with
-> the post-migration stability work. The post-migration work is still ongoing.
-> The known issues from the migration are tracked in the "K8s Migration Known
-> Issues" spreadsheet which is linked from the team's shared drive.
-
-## Monitoring
 
 ### Health Check Endpoints
 
@@ -134,19 +231,6 @@ During an incident, use the following channels:
 | Configuration | Per change | 90 days | Git history |
 | TLS certificates | Per change | 3 years | Encrypted backup |
 
-### Backup Verification
-
-Backups are verified weekly by restoring to a staging environment and running
-integrity checks. The verification process takes approximately 4 hours for a
-full database restore. The verification results are posted to `#ops-backups`.
-
-TODO: The backup verification process is partially automated. The restore is
-automated but the integrity checks require manual review. The manual review
-involves checking that the restored database has the expected row counts and
-that no tables are missing. The row count check was added after an incident
-where a backup was taken while a migration was running, resulting in an
-incomplete backup that restored without error but was missing 3 tables.
-
 ### Recovery Procedure
 
 1. Identify the recovery point (time or transaction ID)
@@ -155,11 +239,6 @@ incomplete backup that restored without error but was missing 3 tables.
 4. Verify data integrity
 5. Resume services
 6. Verify application functionality
-
-Estimated recovery time:
-- Point-in-time recovery: 30-60 minutes
-- Full restore from daily backup: 2-4 hours
-- Full restore from weekly backup: 4-8 hours
 
 ## Database Administration
 
@@ -172,45 +251,9 @@ Estimated recovery time:
 | Frailbox | 2 | 10 | 30s |
 | Admin tools | 1 | 5 | 60s |
 
-### Maintenance Windows
-
-Scheduled maintenance windows:
-
-| Environment | Day | Time (UTC) | Max Duration |
-|-------------|-----|------------|--------------|
-| Development | Any | Any | No limit |
-| Staging | Wednesday | 14:00-16:00 | 2 hours |
-| Production | Sunday | 06:00-08:00 | 2 hours |
-
-Unscheduled maintenance requires:
-1. CAB approval (change advisory board)
-2. 48-hour notice to stakeholders
-3. Documented rollback plan
-
-### Common Database Tasks
-
-Vacuum analyze:
-```sql
-VACUUM ANALYZE;
-```
-
-Reindex:
-```sql
-REINDEX DATABASE tent_production;
-```
-
-Kill idle transactions:
-```sql
-SELECT pg_terminate_backend(pid)
-FROM pg_stat_activity
-WHERE state = 'idle' AND age > interval '1 hour';
-```
-
 ## Capacity Planning
 
 ### Resource Utilization
-
-Current resource utilization (as of last review):
 
 | Resource | Total | Used | Available | Trend |
 |----------|-------|------|-----------|-------|
@@ -219,29 +262,6 @@ Current resource utilization (as of last review):
 | Disk (TB) | 5 | 2.4 | 2.6 | Growing +3%/month |
 | Network (Gbps) | 10 | 3.2 | 6.8 | Stable |
 | DB Storage (TB) | 1.5 | 0.8 | 0.7 | Growing +8%/month |
-
-### Scaling Triggers
-
-| Resource | Scale Up | Scale Down |
-|----------|----------|------------|
-| CPU | > 70% for 10 minutes | < 30% for 30 minutes |
-| Memory | > 80% for 10 minutes | < 50% for 30 minutes |
-| Requests/sec | > 80% of capacity | < 30% of capacity |
-| Queue depth | > 1000 for 5 minutes | < 100 for 15 minutes |
-
-### Projected Growth
-
-Based on current trends:
-- Q2 2024: Need 20% more capacity
-- Q3 2024: Need 35% more capacity
-- Q4 2024: Need 50% more capacity
-
-TODO: The growth projections have been consistently overestimated by
-~40%. The overestimation was noticed in 2023 but the projection model
-was never updated because the data science team that built the model
-was dissolved in the 2023 reorg. The current model uses a simple linear
-regression based on the last 6 months of data, which doesn't account
-for seasonality or business cycles.
 
 ## Security
 
@@ -265,17 +285,6 @@ Audit logs are retained for 365 days and include:
 - All deployment events
 - All backup and restore operations
 
-### Security Scanning
-
-| Scan Type | Frequency | Tool |
-|-----------|-----------|------|
-| Vulnerability scan | Weekly | Trivy |
-| Dependency scan | Per build | npm audit, cargo audit |
-| SAST | Per PR | Semgrep |
-| DAST | Monthly | OWASP ZAP |
-| Penetration test | Quarterly | External vendor |
-| Compliance audit | Annually | External auditor |
-
 ## Troubleshooting
 
 ### Common Issues
@@ -291,7 +300,6 @@ Audit logs are retained for 365 days and include:
 2. Check connection pool utilization
 3. Check for slow external API calls
 4. Check garbage collection metrics
-5. Check for network congestion
 
 **Memory leak**
 1. Capture heap dump: `kubectl exec -n tent-production deploy/backend-api -- kill -3 1`
@@ -303,10 +311,3 @@ Audit logs are retained for 365 days and include:
 1. Find idle connections: `SELECT pid, state, query_start FROM pg_stat_activity ORDER BY query_start`
 2. Kill long-running queries: `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE state = 'active' AND query_start < now() - interval '30 minutes'`
 3. Check application connection pool settings
-4. Consider increasing max_connections temporarily
-
-**Certificate about to expire**
-1. Generate new certificate
-2. Update Kubernetes secret: `kubectl create secret tls tot-tls --cert=new.crt --key=new.key -n tent-production --dry-run=client -o yaml | kubectl apply -f -`
-3. Restart services: `kubectl rollout restart deployment -n tent-production`
-4. Verify new certificate: `openssl s_client -connect api.example.com:443 -servername api.example.com`
