@@ -47,6 +47,56 @@ def diagnostic_paths_for_commit() -> tuple[Path, Path, str]:
     return logd_path, metadata_path, commit_id
 
 
+def diagnostic_artifacts(diagnostic_dir: Path = DIAGNOSTIC_DIR) -> list[Path]:
+    """Return build diagnostic artifacts managed by this script."""
+    if not diagnostic_dir.exists():
+        return []
+    patterns = [
+        "build-*.logd",
+        "build-*.json",
+    ]
+    artifacts: list[Path] = []
+    for pattern in patterns:
+        artifacts.extend(path for path in diagnostic_dir.glob(pattern) if path.is_file())
+    return sorted(set(artifacts))
+
+
+def stale_diagnostic_artifacts(
+    current_commit: Optional[str] = None,
+    diagnostic_dir: Path = DIAGNOSTIC_DIR,
+) -> list[Path]:
+    """Return diagnostic artifacts that do not belong to the current commit."""
+    commit_id = current_commit or current_commit_id()
+    current_prefix = f"build-{commit_id}"
+    return [
+        path
+        for path in diagnostic_artifacts(diagnostic_dir)
+        if not path.name.startswith(current_prefix)
+    ]
+
+
+def stale_diagnostic_bytes(paths: list[Path]) -> int:
+    """Return the total size of stale diagnostic artifacts."""
+    total = 0
+    for path in paths:
+        try:
+            total += path.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def check_stale_diagnostics(
+    max_stale_bytes: int = 0,
+    current_commit: Optional[str] = None,
+    diagnostic_dir: Path = DIAGNOSTIC_DIR,
+) -> tuple[bool, list[Path], int]:
+    """Check whether stale diagnostics are within the configured byte threshold."""
+    stale = stale_diagnostic_artifacts(current_commit, diagnostic_dir)
+    total_bytes = stale_diagnostic_bytes(stale)
+    return total_bytes <= max_stale_bytes, stale, total_bytes
+
+
 def split_diagnostic_logd(logd_path: Path, chunk_size: int = DIAGNOSTIC_CHUNK_SIZE) -> list[Path]:
     """Split an oversized .logd into numbered .logd chunks and remove the original."""
     if logd_path.stat().st_size <= chunk_size:
@@ -824,6 +874,7 @@ Examples:
   python3 build.py --clean            Clean all artifacts
   python3 build.py --release          Release build (Rust only)
   python3 build.py --verbose          Verbose output
+  python3 build.py --check-stale      Fail if stale diagnostics exist
 
 Diagnostic bundle:
   python3 build.py
@@ -850,6 +901,16 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Read-only CI gate: exit 1 if stale diagnostic artifacts exist",
+    )
+    parser.add_argument(
+        "--max-stale-bytes",
+        type=int,
+        default=0,
+        help="Allowed stale diagnostic bytes for --check-stale (default: 0)",
+    )
 
     args = parser.parse_args()
 
@@ -863,6 +924,30 @@ Diagnostic bundle:
             print(f"    {color(m.name, Colors.CYAN)} ({m.language})")
             print(f"      dir: {m.dir.relative_to(ROOT)}")
             print(f"      build: {' '.join(m.build_cmd)}")
+        return 0
+
+    if args.check_stale:
+        commit_id = current_commit_id()
+        ok, stale, stale_bytes = check_stale_diagnostics(
+            max_stale_bytes=max(0, args.max_stale_bytes),
+            current_commit=commit_id,
+        )
+        print(f"  {color('Checking stale diagnostics...', Colors.GRAY)}")
+        print(f"  Current commit: {commit_id}")
+        print(f"  Stale artifacts: {len(stale)} ({stale_bytes} bytes)")
+        for artifact in stale:
+            try:
+                size = artifact.stat().st_size
+            except OSError:
+                size = 0
+            print(f"    {artifact.relative_to(ROOT)} ({size} bytes)")
+        if not ok:
+            print(
+                f"  {color('✗ Stale diagnostics exceed threshold', Colors.RED)} "
+                f"({stale_bytes} > {max(0, args.max_stale_bytes)} bytes)"
+            )
+            return 1
+        print(f"  {color('✓ Stale diagnostics within threshold', Colors.GREEN)}")
         return 0
 
     print(f"  {color('Checking prerequisites...', Colors.GRAY)}")
