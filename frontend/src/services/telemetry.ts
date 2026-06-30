@@ -110,7 +110,7 @@ interface TelemetryConfig {
   debug: boolean;
 }
 
-interface TelemetryState {
+export interface TelemetryState {
   events: TelemetryEvent[];
   sessionId: string;
   config: TelemetryConfig;
@@ -421,6 +421,50 @@ export function setTelemetryEnabled(enabled: boolean): void {
 export function setSampleRate(rate: number): void {
   state.config.sampleRate = Math.max(0, Math.min(1, rate));
 }
+
+// ---------------------------------------------------------------------------
+// TEST HELPERS (exported for internal test access only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Reset the internal telemetry state to defaults.
+ * This is intended for test isolation only.
+ */
+export function __resetTelemetryState(): void {
+  stopFlushTimer();
+  state.events = [];
+  state.sessionId = generateSessionId();
+  state.config = { ...DEFAULT_CONFIG };
+  state.isFlushing = false;
+  state.retryCount = 0;
+  state.totalEventsSent = 0;
+  state.totalEventsDropped = 0;
+  state.lastFlushTime = 0;
+  state.flushErrors = 0;
+}
+
+/**
+ * Return a read-only snapshot of the internal telemetry state.
+ * This is intended for test assertions only.
+ */
+export function __getTelemetryState(): Readonly<TelemetryState> {
+  return {
+    events: [...state.events],
+    sessionId: state.sessionId,
+    config: { ...state.config },
+    flushTimer: state.flushTimer,
+    isFlushing: state.isFlushing,
+    retryCount: state.retryCount,
+    totalEventsSent: state.totalEventsSent,
+    totalEventsDropped: state.totalEventsDropped,
+    lastFlushTime: state.lastFlushTime,
+    flushErrors: state.flushErrors,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// INTERNALS
+// ---------------------------------------------------------------------------
 
 function enqueueEvent(event: TelemetryEvent): void {
   if (state.events.length >= MAX_EVENT_QUEUE_SIZE) {
