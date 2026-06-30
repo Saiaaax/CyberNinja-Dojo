@@ -6,6 +6,7 @@ import getpass
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -68,6 +69,66 @@ def split_diagnostic_logd(logd_path: Path, chunk_size: int = DIAGNOSTIC_CHUNK_SI
     logd_path.unlink()
     return chunks
 
+
+# ---------------------------------------------------------------------------
+# STALE ARTIFACT CHECKING (for CI gating)
+# ---------------------------------------------------------------------------
+
+def find_stale_artifacts(current_commit: str) -> list[tuple[Path, int]]:
+    """Find diagnostic artifacts that belong to commits other than current_commit.
+
+    Returns a list of (path, size_bytes) tuples for stale artifacts.
+    """
+    stale: list[tuple[Path, int]] = []
+    if not DIAGNOSTIC_DIR.exists():
+        return stale
+
+    # Pattern: build-{8-hex-chars}.logd, build-{8-hex-chars}.json,
+    #          build-{8-hex-chars}-partNNN.logd
+    artifact_pattern = re.compile(r"^build-([0-9a-f]{8})(?:-part\d{3})?\.(logd|json)$")
+
+    for entry in DIAGNOSTIC_DIR.iterdir():
+        if not entry.is_file():
+            continue
+        match = artifact_pattern.match(entry.name)
+        if not match:
+            continue
+        artifact_commit = match.group(1)
+        if artifact_commit != current_commit:
+            stale.append((entry, entry.stat().st_size))
+
+    return stale
+
+
+def check_stale_artifacts(max_stale_bytes: int = 0) -> tuple[bool, list[tuple[Path, int]]]:
+    """Check if stale diagnostic artifacts exist.
+
+    Args:
+        max_stale_bytes: Maximum allowed total bytes of stale artifacts.
+                         0 means any stale artifact is an error.
+
+    Returns:
+        (is_clean, stale_artifacts) where is_clean is True if no stale
+        artifacts exist (or total bytes <= max_stale_bytes).
+    """
+    current_commit = current_commit_id()
+    stale = find_stale_artifacts(current_commit)
+
+    if not stale:
+        return True, []
+
+    total_stale_bytes = sum(size for _, size in stale)
+
+    if max_stale_bytes == 0:
+        # Any stale artifact is an error
+        return False, stale
+
+    return total_stale_bytes <= max_stale_bytes, stale
+
+
+# ---------------------------------------------------------------------------
+# MODULE DEFINITIONS
+# ---------------------------------------------------------------------------
 
 @dataclass
 class Module:
@@ -287,9 +348,6 @@ def check_encryptly_runs(timeout: int = 600) -> tuple[bool, str]:
             text=True,
             timeout=timeout,
         )
-        # if result.returncode != 0:
-        #     output = result.stderr.strip() or result.stdout.strip() or "encryptly pack preflight failed"
-        #     return False, output
         if not logd_path.exists():
             return False, "encryptly preflight completed without creating a .logd"
         return True, "encryptly preflight passed"
@@ -300,6 +358,7 @@ def check_encryptly_runs(timeout: int = 600) -> tuple[bool, str]:
     finally:
         shutil.rmtree(workspace, ignore_errors=True)
 
+
 class Colors:
     GREEN = "\033[92m"
     YELLOW = "\033[93m"
@@ -309,10 +368,12 @@ class Colors:
     RESET = "\033[0m"
     GRAY = "\033[90m"
 
+
 def color(text: str, code: str) -> str:
     if not sys.stdout.isatty():
         return text
     return f"{code}{text}{Colors.RESET}"
+
 
 def check_prerequisites() -> list[str]:
     required = {
@@ -336,6 +397,7 @@ def check_prerequisites() -> list[str]:
             missing.append(f"{label} ({cmd})")
 
     return missing
+
 
 def build_module(
     module: Module,
@@ -433,6 +495,7 @@ def build_module(
 
     return success, elapsed, output
 
+
 def clean_module(module: Module, verbose: bool = False) -> bool:
     print(f"  {color('▸', Colors.YELLOW)} Cleaning {module.name}...")
     try:
@@ -449,6 +512,7 @@ def clean_module(module: Module, verbose: bool = False) -> bool:
         print(f"    {color('✗', Colors.RED)} Clean failed: {e}")
         return False
 
+
 def verify_binary(module: Module) -> Optional[str]:
     if module.build_dir is None:
         return None
@@ -463,6 +527,7 @@ def verify_binary(module: Module) -> Optional[str]:
     if path.exists():
         return str(path)
     return None
+
 
 def run_cmd(cmd: list[str], **kwargs) -> tuple[bool, str]:
     try:
@@ -812,6 +877,7 @@ def print_summary(results: list[tuple[str, bool, float, str, Optional[str]]]):
           f"{color(str(failed) + ' failed', Colors.RED)}, "
           f"{total_time:.1f}s total")
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Tent of Trials  -  Multi-Language Build System",
@@ -824,6 +890,8 @@ Examples:
   python3 build.py --clean            Clean all artifacts
   python3 build.py --release          Release build (Rust only)
   python3 build.py --verbose          Verbose output
+  python3 build.py --check-stale      CI gate: fail if stale diagnostics exist
+  python3 build.py --check-stale --max-stale-bytes 1024  Allow up to 1KB stale
 
 Diagnostic bundle:
   python3 build.py
@@ -850,8 +918,38 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Exit non-zero if older (non-current-commit) diagnostic artifacts exist. "
+             "Useful as a CI gate to prevent PRs from including outdated diagnostics.",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Maximum total bytes of stale diagnostic artifacts to allow (default: 0, "
+             "meaning any stale artifact triggers failure). Only used with --check-stale.",
+    )
 
     args = parser.parse_args()
+
+    # --check-stale mode: independent of build, exits after check
+    if args.check_stale:
+        current_commit = current_commit_id()
+        is_clean, stale = check_stale_artifacts(args.max_stale_bytes)
+
+        if is_clean:
+            print(f"  {color('✓', Colors.GREEN)} No stale diagnostic artifacts found "
+                  f"(current commit: {current_commit})")
+            return 0
+
+        total_stale_bytes = sum(size for _, size in stale)
+        print(f"\n  {color('✗ STALE DIAGNOSTIC ARTIFACTS FOUND', Colors.RED)}")
+        print(f"  Current commit: {color(current_commit, Colors.CYAN)}")
+        print(f"  Stale artifacts ({len(stale)} files, {total_stale_bytes} bytes total):")
+        for path, size in stale:
+            print(f"    {color(str(path.relative_to(ROOT)), Colors.YELLOW)} ({size} bytes)")
+        print(f"\n  {color('Tip:', Colors.BOLD)} Run `python3 build.py --clean` to remove stale artifacts, "
+              f"or increase --max-stale-bytes (currently {args.max_stale_bytes}).")
+        return 1
 
     print(f"\n  {color('Tent of Trials: building', Colors.CYAN)}")
     print(f"  Working directory: {ROOT}")
@@ -940,5 +1038,112 @@ Diagnostic bundle:
 
     return 0 if diagnostics_ok and all(r[1] for r in results) else 1
 
+
+# ---------------------------------------------------------------------------
+# TESTS
+# ---------------------------------------------------------------------------
+
+def run_tests():
+    """Run self-tests for the stale-artifact checking logic."""
+    import tempfile
+
+    passed = 0
+    failed = 0
+
+    def assert_equal(actual, expected, message):
+        nonlocal passed, failed
+        if actual == expected:
+            passed += 1
+            print(f"    ✓ {message}")
+        else:
+            failed += 1
+            print(f"    ✗ {message}: expected {expected}, got {actual}")
+
+    print(f"\n  {color('Running build.py self-tests...', Colors.CYAN)}")
+
+    # Test 1: Empty diagnostic dir returns clean
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        original_dir = globals()['DIAGNOSTIC_DIR']
+        globals()['DIAGNOSTIC_DIR'] = tmp_path
+        try:
+            is_clean, stale = check_stale_artifacts(0)
+            assert_equal(is_clean, True, "empty diagnostic dir is clean")
+            assert_equal(len(stale), 0, "no stale artifacts in empty dir")
+        finally:
+            globals()['DIAGNOSTIC_DIR'] = original_dir
+
+    # Test 2: Current commit artifact is not stale
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        original_dir = globals()['DIAGNOSTIC_DIR']
+        globals()['DIAGNOSTIC_DIR'] = tmp_path
+        try:
+            current = current_commit_id()
+            (tmp_path / f"build-{current}.logd").write_text("current", encoding="utf-8")
+            (tmp_path / f"build-{current}.json").write_text("{}", encoding="utf-8")
+            is_clean, stale = check_stale_artifacts(0)
+            assert_equal(is_clean, True, "current commit artifacts are not stale")
+            assert_equal(len(stale), 0, "no stale with only current artifacts")
+        finally:
+            globals()['DIAGNOSTIC_DIR'] = original_dir
+
+    # Test 3: Different commit artifact is stale
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        original_dir = globals()['DIAGNOSTIC_DIR']
+        globals()['DIAGNOSTIC_DIR'] = tmp_path
+        try:
+            current = current_commit_id()
+            stale_commit = "deadbeef"
+            (tmp_path / f"build-{current}.logd").write_text("current", encoding="utf-8")
+            (tmp_path / f"build-{stale_commit}.logd").write_text("stale", encoding="utf-8")
+            is_clean, stale = check_stale_artifacts(0)
+            assert_equal(is_clean, False, "different commit artifact is stale")
+            assert_equal(len(stale), 1, "one stale artifact found")
+            assert_equal(stale[0][0].name, "build-deadbeef.logd", "stale artifact name matches")
+        finally:
+            globals()['DIAGNOSTIC_DIR'] = original_dir
+
+    # Test 4: max_stale_bytes threshold allows small stale
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        original_dir = globals()['DIAGNOSTIC_DIR']
+        globals()['DIAGNOSTIC_DIR'] = tmp_path
+        try:
+            current = current_commit_id()
+            stale_commit = "cafebabe"
+            (tmp_path / f"build-{current}.logd").write_text("current", encoding="utf-8")
+            (tmp_path / f"build-{stale_commit}.logd").write_text("x" * 500, encoding="utf-8")
+            is_clean, stale = check_stale_artifacts(1000)
+            assert_equal(is_clean, True, "500 bytes stale under 1000 byte limit")
+            is_clean2, _ = check_stale_artifacts(100)
+            assert_equal(is_clean2, False, "500 bytes stale over 100 byte limit")
+        finally:
+            globals()['DIAGNOSTIC_DIR'] = original_dir
+
+    # Test 5: Chunked stale artifacts are detected
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        original_dir = globals()['DIAGNOSTIC_DIR']
+        globals()['DIAGNOSTIC_DIR'] = tmp_path
+        try:
+            current = current_commit_id()
+            stale_commit = "babecafe"
+            (tmp_path / f"build-{current}.logd").write_text("current", encoding="utf-8")
+            (tmp_path / f"build-{stale_commit}-part001.logd").write_text("chunk1", encoding="utf-8")
+            (tmp_path / f"build-{stale_commit}-part002.logd").write_text("chunk2", encoding="utf-8")
+            is_clean, stale = check_stale_artifacts(0)
+            assert_equal(is_clean, False, "chunked stale artifacts detected")
+            assert_equal(len(stale), 2, "two chunked stale parts found")
+        finally:
+            globals()['DIAGNOSTIC_DIR'] = original_dir
+
+    print(f"\n  {color('Test Results:', Colors.BOLD)} {passed} passed, {color(str(failed) + ' failed', Colors.RED) if failed else color(str(failed) + ' failed', Colors.GREEN)}")
+    return 0 if failed == 0 else 1
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "--self-test":
+        sys.exit(run_tests())
     sys.exit(main())
