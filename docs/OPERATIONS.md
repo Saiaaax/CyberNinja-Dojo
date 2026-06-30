@@ -310,3 +310,128 @@ Audit logs are retained for 365 days and include:
 2. Update Kubernetes secret: `kubectl create secret tls tot-tls --cert=new.crt --key=new.key -n tent-production --dry-run=client -o yaml | kubectl apply -f -`
 3. Restart services: `kubectl rollout restart deployment -n tent-production`
 4. Verify new certificate: `openssl s_client -connect api.example.com:443 -servername api.example.com`
+
+## Build System
+
+### CI Gating with `--check-stale`
+
+The build system supports a `--check-stale` flag designed for CI pipelines
+to prevent pull requests from including outdated diagnostic artifacts.
+
+```bash
+# Fail if any stale diagnostic artifacts exist
+python3 build.py --check-stale
+
+# Allow up to 1KB of stale artifacts (useful during transitions)
+python3 build.py --check-stale --max-stale-bytes 1024
+```
+
+### How It Works
+
+Diagnostic artifacts in `diagnostic/` are named with the commit ID that
+generated them (`build-{commit}.logd` and `build-{commit}.json`). The
+`--check-stale` flag compares each artifact's commit ID against the current
+HEAD and reports an error if any artifact belongs to a different commit.
+
+This is purely a **read-only check** -- it does not delete or modify any
+files. To clean stale artifacts, run:
+
+```bash
+python3 build.py --clean
+```
+
+### CI Pipeline Example
+
+```yaml
+# .github/workflows/ci.yml
+steps:
+  - uses: actions/checkout@v4
+  - name: Check for stale diagnostics
+    run: python3 build.py --check-stale
+  - name: Build all modules
+    run: python3 build.py
+```
+
+### Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--check-stale` | N/A | Enable stale artifact checking |
+| `--max-stale-bytes` | 0 | Maximum stale bytes allowed (0 = any stale is error) |
+
+### Self-Tests
+
+The build script includes self-tests for the stale-checking logic:
+
+```bash
+python3 build.py --self-test
+```
+
+Tests cover:
+- Empty diagnostic directory is clean
+- Current commit artifacts are not stale
+- Different commit artifacts are detected as stale
+- `max_stale_bytes` threshold allows small amounts of stale data
+- Chunked artifacts (`-partNNN.logd`) are properly detected
+
+## Telemetry Service
+
+### Batch Flush Threshold Behavior
+
+The telemetry service batches client-side events and flushes them under three
+conditions:
+
+1. **Batch size threshold** (default 100 events): When the event queue reaches
+   the configured batch size, an immediate flush is triggered. This is the
+   primary mechanism for ensuring timely delivery during high-traffic periods.
+
+2. **Periodic flush** (default 30 seconds): A timer-based flush ensures that
+   low-traffic sessions still deliver events in a timely manner, even if the
+   batch threshold is never reached.
+
+3. **Page unload** (`beforeunload` + `visibilitychange`): When the user
+   navigates away or closes the tab, all queued events are flushed via the
+   Beacon API to prevent data loss.
+
+### Tested Behaviors
+
+The following behaviors are covered by automated tests in
+`frontend/src/services/telemetry.test.ts`:
+
+| Test | Description |
+|------|-------------|
+| Flush at threshold | Queue flushes automatically when the 100th event is enqueued |
+| Page unload flush | `forceFlush()` (called on `beforeunload`) sends all queued events |
+| Partial batch preservation | Failed flushes re-queue events for retry; events are only dropped after max retries exceeded |
+| Reset after flush | Successful flush clears the queue and updates sent counters |
+
+### Event Lifecycle
+
+```
+track() -> enqueueEvent()
+  |
+  +-- queue.length < batchSize -> wait for next event or timer
+  |
+  +-- queue.length >= batchSize -> flushEvents()
+         |
+         +-- success -> totalEventsSent += batch.length, queue cleared
+         |
+         +-- failure -> events re-queued, retryCount++
+                |
+                +-- retryCount < maxRetries -> retry on next trigger
+                |
+                +-- retryCount >= maxRetries -> drop oldest batch, totalEventsDropped += count
+```
+
+### Operational Notes
+
+- The default batch size of 100 events balances throughput against latency.
+  Increase for high-volume scenarios, decrease for lower latency.
+- The flush interval of 30 seconds ensures events don't sit in the queue
+  indefinitely during low-traffic periods.
+- Events are dropped (not re-queued indefinitely) after 3 failed retries to
+  prevent unbounded memory growth in the client.
+- The Beacon API is used for page-unload flushes because it is designed to
+  complete asynchronously without blocking the browser.
+- The `getTelemetryStats()` function can be called from the browser console
+  to inspect current queue depth, sent count, and error count for debugging.
