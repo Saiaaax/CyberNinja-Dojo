@@ -850,6 +850,14 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Check for stale (non-current-commit) diagnostic artifacts and exit",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Maximum byte size threshold for stale diagnostic artifacts (default: 0)",
+    )
 
     args = parser.parse_args()
 
@@ -864,6 +872,37 @@ Diagnostic bundle:
             print(f"      dir: {m.dir.relative_to(ROOT)}")
             print(f"      build: {' '.join(m.build_cmd)}")
         return 0
+
+    if args.check_stale:
+        curr_id = current_commit_id()
+        stale_artifacts = []
+        stale_bytes = 0
+        if DIAGNOSTIC_DIR.exists():
+            for pattern in [
+                "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].logd",
+                "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-part*.logd",
+                "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].json",
+                "build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-metadata.json"
+            ]:
+                for path in DIAGNOSTIC_DIR.glob(pattern):
+                    name = path.name
+                    if name.startswith("build-"):
+                        file_commit = name[6:14]
+                        if file_commit != curr_id:
+                            stale_artifacts.append(path)
+                            stale_bytes += path.stat().st_size
+        if stale_bytes > args.max_stale_bytes:
+            print(f"Error: Stale diagnostic artifacts exceed limit of {args.max_stale_bytes} bytes (found {stale_bytes} bytes).")
+            for path in stale_artifacts:
+                try:
+                    rel = path.relative_to(ROOT)
+                except ValueError:
+                    rel = path
+                print(f"  {rel} ({path.stat().st_size} bytes)")
+            return 1
+        else:
+            print(f"Check passed: Stale diagnostic artifacts size ({stale_bytes} bytes) is within limit ({args.max_stale_bytes} bytes).")
+            return 0
 
     print(f"  {color('Checking prerequisites...', Colors.GRAY)}")
     missing = check_prerequisites()
