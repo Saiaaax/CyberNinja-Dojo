@@ -850,8 +850,48 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Exit 1 if stale (non-current-commit) diagnostic artifacts exist, 0 otherwise. Read-only CI gate.",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Maximum total bytes of stale artifacts allowed before failing --check-stale (default: 0 = any stale is error).",
+    )
 
     args = parser.parse_args()
+
+    if args.check_stale:
+        current_id = current_commit_id()
+        DIAGNOSTIC_DIR.mkdir(parents=True, exist_ok=True)
+        stale_artifacts = []
+        stale_bytes = 0
+        for artifact in DIAGNOSTIC_DIR.iterdir():
+            name = artifact.name
+            if not name.startswith("build-"):
+                continue
+            # Extract commit ID from filename
+            parts = name.split("-")
+            if len(parts) < 2:
+                continue
+            artifact_commit = parts[1].split(".")[0].split("-")[0]
+            if artifact_commit != current_id:
+                size = artifact.stat().st_size if artifact.is_file() else 0
+                stale_artifacts.append((name, size))
+                stale_bytes += size
+        if stale_artifacts:
+            print(f"  {color(f'Found {len(stale_artifacts)} stale artifact(s), {stale_bytes} bytes', Colors.YELLOW)}")
+            for name, size in stale_artifacts:
+                print(f"    {name} ({size} bytes)")
+            if stale_bytes > args.max_stale_bytes:
+                print(f"  {color('CI gate: FAIL (stale artifacts exceed threshold)', Colors.RED)}")
+                return 1
+            else:
+                print(f"  {color(f'CI gate: PASS (within --max-stale-bytes={args.max_stale_bytes})', Colors.GREEN)}")
+                return 0
+        else:
+            print(f"  {color('CI gate: PASS (no stale artifacts)', Colors.GREEN)}")
+            return 0
 
     print(f"\n  {color('Tent of Trials: building', Colors.CYAN)}")
     print(f"  Working directory: {ROOT}")
