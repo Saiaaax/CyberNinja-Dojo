@@ -15,6 +15,15 @@
 
 ## Monitoring
 
+### Client Telemetry Batching
+
+The frontend telemetry service batches client-side events before sending them
+to the configured telemetry endpoint. A batch is flushed when it reaches 100
+queued events, when the page is about to unload, or when the document becomes
+hidden. Partial batches stay queued until one of those flush triggers occurs.
+After a successful flush, the in-memory queue is cleared and later events start
+a fresh batch.
+
 ### Health Check Endpoints
 
 Each service exposes a health check endpoint:
