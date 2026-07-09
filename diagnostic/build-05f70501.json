@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-07-09T08:16:52.715638+00:00",
+  "commit": "05f70501",
+  "diagnostic_logd": "diagnostic\\build-05f70501.logd",
+  "diagnostic_logd_error": null,
+  "message_blocker": null,
+  "chunked": false,
+  "chunk_size_bytes": null,
+  "password": "5bec3673ed9c0e4ce570",
+  "decrypt_command": "encryptly unpack diagnostic\\build-05f70501.logd <outdir> --password 5bec3673ed9c0e4ce570",
+  "total_modules": 1,
+  "passed": 0,
+  "failed": 1,
+  "modules": [
+    {
+      "name": "frontend",
+      "status": "FAIL",
+      "elapsed_seconds": 1.884,
+      "artifact": null,
+      "output": "src/App.tsx(2,10): error TS2305: Module '\"react-router-dom\"' has no exported member 'Routes'.\nsrc/App.tsx(2,18): error TS2305: Module '\"react-router-dom\"' has no exported member 'Route'.\nsrc/App.tsx(2,25): error TS2305: Module '\"react-router-dom\"' has no exported member 'Navigate'.\nsrc/components/Sidebar.tsx(2,10): error TS2305: Module '\"react-router-dom\"' has no exported member 'NavLink'.\nsrc/components/Sidebar.tsx(45,33): error TS7031: Binding element 'isActive' implicitly has an 'any' type.\nsrc/main.tsx(4,10): error TS2305: Module '\"react-router-dom\"' has no exported member 'BrowserRouter'."
+    }
+  ],
+  "pr_note": "Include the encrypted diagnostic logd artifact(s): diagnostic\\build-05f70501.logd. The encrypted .logd is the required diagnostic content for PR review; this JSON file is metadata. Maintainers may ask you to remove these diagnostic artifacts before merging."
+}
