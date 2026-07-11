@@ -69,6 +69,68 @@ def split_diagnostic_logd(logd_path: Path, chunk_size: int = DIAGNOSTIC_CHUNK_SI
     return chunks
 
 
+def iter_diagnostic_artifacts() -> list[Path]:
+    """Return diagnostic artifact files under diagnostic/, if present."""
+    if not DIAGNOSTIC_DIR.exists():
+        return []
+
+    patterns = (
+        "build-*.logd",
+        "build-*-part*.logd",
+        "build-*.json",
+        "build-*-metadata.json",
+    )
+    artifacts: list[Path] = []
+    for pattern in patterns:
+        artifacts.extend(DIAGNOSTIC_DIR.glob(pattern))
+    return sorted({path for path in artifacts if path.is_file()})
+
+
+def is_current_commit_artifact(path: Path, commit_id: str) -> bool:
+    current_prefix = f"build-{commit_id}"
+    return path.name.startswith(current_prefix)
+
+
+def diagnostic_retention_report() -> dict:
+    """Summarize current vs stale diagnostic artifacts for the active commit."""
+    commit_id = current_commit_id()
+    current: list[dict[str, object]] = []
+    stale: list[dict[str, object]] = []
+
+    for path in iter_diagnostic_artifacts():
+        entry = {
+            "path": str(path.relative_to(ROOT)),
+            "bytes": path.stat().st_size,
+        }
+        if is_current_commit_artifact(path, commit_id):
+            current.append(entry)
+        else:
+            stale.append(entry)
+
+    stale_bytes = sum(int(item["bytes"]) for item in stale)
+    return {
+        "commit": commit_id,
+        "current": current,
+        "stale": stale,
+        "stale_bytes": stale_bytes,
+    }
+
+
+def check_stale_diagnostic_artifacts(max_stale_bytes: int = 0) -> int:
+    """Exit non-zero when stale diagnostic artifacts exceed the byte threshold."""
+    report = diagnostic_retention_report()
+    stale_bytes = int(report["stale_bytes"])
+    if stale_bytes > max_stale_bytes:
+        print(json.dumps(report, indent=2))
+        return 1
+
+    print(
+        f"No stale diagnostic artifacts beyond {max_stale_bytes} bytes "
+        f"(found {stale_bytes})."
+    )
+    return 0
+
+
 @dataclass
 class Module:
     name: str
@@ -850,8 +912,29 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--retention-report", action="store_true",
+        help="Print diagnostic artifact retention report and exit",
+    )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Exit 1 when stale diagnostic artifacts exceed --max-stale-bytes",
+    )
+    parser.add_argument(
+        "--max-stale-bytes",
+        type=int,
+        default=0,
+        help="Allowed stale diagnostic bytes before --check-stale fails (default: 0)",
+    )
 
     args = parser.parse_args()
+
+    if args.retention_report:
+        print(json.dumps(diagnostic_retention_report(), indent=2))
+        return 0
+
+    if args.check_stale:
+        return check_stale_diagnostic_artifacts(args.max_stale_bytes)
 
     print(f"\n  {color('Tent of Trials: building', Colors.CYAN)}")
     print(f"  Working directory: {ROOT}")
