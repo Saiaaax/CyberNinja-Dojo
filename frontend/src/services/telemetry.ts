@@ -422,6 +422,29 @@ export function setSampleRate(rate: number): void {
   state.config.sampleRate = Math.max(0, Math.min(1, rate));
 }
 
+/** Reset in-memory telemetry state for unit tests (does not touch browser listeners). */
+export function resetTelemetryForTests(config?: Partial<TelemetryConfig>): void {
+  stopFlushTimer();
+  state.events = [];
+  state.isFlushing = false;
+  state.retryCount = 0;
+  state.totalEventsSent = 0;
+  state.totalEventsDropped = 0;
+  state.lastFlushTime = 0;
+  state.flushErrors = 0;
+  state.config = {
+    ...DEFAULT_CONFIG,
+    enabled: true,
+    endpoint: "https://telemetry.test/ingest",
+    batchSize: 100,
+    flushInterval: 999_999,
+    sampleRate: 1,
+    debug: false,
+    ...config,
+  };
+  state.sessionId = generateSessionId();
+}
+
 function enqueueEvent(event: TelemetryEvent): void {
   if (state.events.length >= MAX_EVENT_QUEUE_SIZE) {
     state.totalEventsDropped++;
