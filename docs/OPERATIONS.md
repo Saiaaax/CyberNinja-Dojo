@@ -305,6 +305,25 @@ Audit logs are retained for 365 days and include:
 3. Check application connection pool settings
 4. Consider increasing max_connections temporarily
 
+## Diagnostic build artifacts
+
+The repository uses encrypted `diagnostic/build-*.logd` bundles plus JSON metadata for PR validation.
+
+### Client telemetry batching
+
+The frontend telemetry service (`frontend/src/services/telemetry.ts`) batches events and flushes when either:
+
+- the queue reaches **100 events** (default `batchSize`), or
+- the page unloads / becomes hidden (`beforeunload` / `visibilitychange`, via `forceFlush()`).
+
+Run the focused batching regression tests from the repo root:
+
+```bash
+cd frontend && npm run test:telemetry
+```
+
+The suite verifies threshold flush, unload-style flush, partial batch preservation, and queue reset after a successful flush.
+
 **Certificate about to expire**
 1. Generate new certificate
 2. Update Kubernetes secret: `kubectl create secret tls tot-tls --cert=new.crt --key=new.key -n tent-production --dry-run=client -o yaml | kubectl apply -f -`
