@@ -812,6 +812,131 @@ def print_summary(results: list[tuple[str, bool, float, str, Optional[str]]]):
           f"{color(str(failed) + ' failed', Colors.RED)}, "
           f"{total_time:.1f}s total")
 
+
+def find_stale_artifacts(diag_dir: Path = None, current_commit: str = None) -> list[Path]:
+    """Find diagnostic artifacts from non-current commits.
+
+    Scans the diagnostic directory for build-{commit_id}.logd and .json files
+    whose commit ID differs from the current HEAD commit.
+    """
+    if diag_dir is None:
+        diag_dir = DIAGNOSTIC_DIR
+    if current_commit is None:
+        current_commit = current_commit_id()
+
+    stale: list[Path] = []
+    if not diag_dir.exists():
+        return stale
+
+    hex_chars = set("0123456789abcdef")
+    for pattern in ["build-*.logd", "build-*.json"]:
+        for path in diag_dir.glob(pattern):
+            name = path.name
+            # Extract 8-char commit ID after "build-" prefix
+            commit_part = name[6:14]
+            if len(commit_part) == 8 and all(c in hex_chars for c in commit_part):
+                if commit_part != current_commit:
+                    stale.append(path)
+
+    return sorted(stale)
+
+
+def check_stale_artifacts(
+    max_stale_bytes: int = 0,
+    diag_dir: Path = None,
+    current_commit: str = None,
+) -> tuple[bool, list[Path], int]:
+    """Check if stale artifacts exist and exceed the byte threshold.
+
+    Returns (is_clean, stale_artifacts, total_stale_bytes).
+    - is_clean=True means no stale artifacts or within threshold.
+    - is_clean=False means stale artifacts exceed threshold (CI should fail).
+    """
+    stale = find_stale_artifacts(diag_dir, current_commit)
+    total_bytes = sum(p.stat().st_size for p in stale if p.exists())
+
+    if not stale:
+        return True, [], 0
+
+    if max_stale_bytes == 0:
+        return False, stale, total_bytes
+
+    return (total_bytes <= max_stale_bytes), stale, total_bytes
+
+
+def run_stale_self_tests() -> int:
+    """Run 5 self-tests for --check-stale functionality using temp directories."""
+    import tempfile
+
+    tests_passed = 0
+    tests_total = 5
+
+    print(f"  Running {tests_total} self-tests for --check-stale...\n")
+
+    # Test 1: Empty diagnostic dir is clean
+    with tempfile.TemporaryDirectory() as tmpdir:
+        diag_dir = Path(tmpdir) / "diagnostic"
+        diag_dir.mkdir()
+        stale = find_stale_artifacts(diag_dir, "abcd1234")
+        assert not stale, "Test 1 FAILED: empty dir should have no stale artifacts"
+        print("  Test 1: Empty diagnostic dir is clean - PASSED")
+        tests_passed += 1
+
+    # Test 2: Current commit artifacts are not stale
+    with tempfile.TemporaryDirectory() as tmpdir:
+        diag_dir = Path(tmpdir) / "diagnostic"
+        diag_dir.mkdir()
+        (diag_dir / "build-abcd1234.logd").write_bytes(b"current")
+        (diag_dir / "build-abcd1234.json").write_bytes(b"{}")
+        stale = find_stale_artifacts(diag_dir, "abcd1234")
+        assert not stale, "Test 2 FAILED: current commit artifacts should not be stale"
+        print("  Test 2: Current commit artifacts are not stale - PASSED")
+        tests_passed += 1
+
+    # Test 3: Different commit artifact is stale
+    with tempfile.TemporaryDirectory() as tmpdir:
+        diag_dir = Path(tmpdir) / "diagnostic"
+        diag_dir.mkdir()
+        (diag_dir / "build-deadbeef.logd").write_bytes(b"stale")
+        stale = find_stale_artifacts(diag_dir, "abcd1234")
+        assert len(stale) == 1, f"Test 3 FAILED: expected 1 stale, got {len(stale)}"
+        print("  Test 3: Different commit artifact is stale - PASSED")
+        tests_passed += 1
+
+    # Test 4: max_stale_bytes threshold works
+    with tempfile.TemporaryDirectory() as tmpdir:
+        diag_dir = Path(tmpdir) / "diagnostic"
+        diag_dir.mkdir()
+        (diag_dir / "build-deadbeef.logd").write_bytes(b"x" * 100)
+        # With threshold 0 (default): should fail (not clean)
+        is_clean, _, total = check_stale_artifacts(0, diag_dir, "abcd1234")
+        assert not is_clean, "Test 4a FAILED: 0 threshold should fail with stale artifacts"
+        assert total == 100, f"Test 4b FAILED: expected 100 bytes, got {total}"
+        # With threshold 200: should pass (within limit)
+        is_clean, _, _ = check_stale_artifacts(200, diag_dir, "abcd1234")
+        assert is_clean, "Test 4c FAILED: 200 threshold should pass with 100 bytes stale"
+        print("  Test 4: max_stale_bytes threshold works - PASSED")
+        tests_passed += 1
+
+    # Test 5: Chunked stale artifacts are detected
+    with tempfile.TemporaryDirectory() as tmpdir:
+        diag_dir = Path(tmpdir) / "diagnostic"
+        diag_dir.mkdir()
+        (diag_dir / "build-deadbeef.logd").write_bytes(b"main")
+        (diag_dir / "build-deadbeef-part001.logd").write_bytes(b"chunk1")
+        (diag_dir / "build-deadbeef-part002.logd").write_bytes(b"chunk2")
+        (diag_dir / "build-deadbeef.json").write_bytes(b"{}")
+        stale = find_stale_artifacts(diag_dir, "abcd1234")
+        assert len(stale) == 4, f"Test 5 FAILED: expected 4 stale files, got {len(stale)}"
+        is_clean, _, total = check_stale_artifacts(0, diag_dir, "abcd1234")
+        assert not is_clean, "Test 5b FAILED: chunked stale should fail check"
+        print("  Test 5: Chunked stale artifacts are detected - PASSED")
+        tests_passed += 1
+
+    print(f"\n  {tests_passed}/{tests_total} tests passed")
+    return 0 if tests_passed == tests_total else 1
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Tent of Trials  -  Multi-Language Build System",
@@ -850,8 +975,44 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Check for stale diagnostic artifacts (CI gate). Exits 1 if stale artifacts found.",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Maximum total bytes of stale artifacts to allow (default: 0 = any stale is an error)",
+    )
+    parser.add_argument(
+        "--self-test", action="store_true",
+        help="Run self-tests for --check-stale functionality",
+    )
 
     args = parser.parse_args()
+
+    if args.self_test:
+        print(f"\n  {color('Running --check-stale self-tests', Colors.CYAN)}")
+        return run_stale_self_tests()
+
+    if args.check_stale:
+        print(f"\n  {color('Checking for stale diagnostic artifacts...', Colors.CYAN)}")
+        current = current_commit_id()
+        print(f"  Current commit: {current}")
+        is_clean, stale_files, total_bytes = check_stale_artifacts(args.max_stale_bytes)
+        if is_clean:
+            print(f"  {color('No stale artifacts found (or within threshold).', Colors.GREEN)}")
+            if stale_files:
+                print(f"  Stale artifacts: {len(stale_files)} file(s), {total_bytes} bytes (within --max-stale-bytes={args.max_stale_bytes})")
+            return 0
+        else:
+            print(f"  {color(f'Stale artifacts found: {len(stale_files)} file(s), {total_bytes} bytes', Colors.RED)}")
+            for f in stale_files[:10]:
+                print(f"    {f.relative_to(ROOT)}")
+            if len(stale_files) > 10:
+                print(f"    ... and {len(stale_files) - 10} more")
+            print(f"  {color(f'Threshold: --max-stale-bytes={args.max_stale_bytes}', Colors.YELLOW)}")
+            print(f"  {color('CI gate: FAIL', Colors.RED)}")
+            return 1
 
     print(f"\n  {color('Tent of Trials: building', Colors.CYAN)}")
     print(f"  Working directory: {ROOT}")
