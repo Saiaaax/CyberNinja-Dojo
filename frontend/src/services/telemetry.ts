@@ -654,3 +654,39 @@ if (DEFAULT_CONFIG.enabled) {
   initTelemetry();
   initWebVitalsTracking();
 }
+
+
+// === Test Helpers (exported for test isolation) ===
+
+export function __resetTelemetryState(): void {
+  state.events = [];
+  state.isFlushing = false;
+  state.totalEventsSent = 0;
+  state.totalFlushes = 0;
+  state.lastFlushTime = 0;
+  state.flushErrors = 0;
+  state.flushTimer = null;
+  state.config = { ...DEFAULT_CONFIG };
+}
+
+export interface TelemetryState {
+  events: TelemetryEvent[];
+  isFlushing: boolean;
+  totalEventsSent: number;
+  totalFlushes: number;
+  lastFlushTime: number;
+  flushErrors: number;
+  config: TelemetryConfig;
+}
+
+export function __getTelemetryState(): TelemetryState {
+  return {
+    events: [...state.events],
+    isFlushing: state.isFlushing,
+    totalEventsSent: state.totalEventsSent,
+    totalFlushes: state.totalFlushes,
+    lastFlushTime: state.lastFlushTime,
+    flushErrors: state.flushErrors,
+    config: { ...state.config },
+  };
+}
