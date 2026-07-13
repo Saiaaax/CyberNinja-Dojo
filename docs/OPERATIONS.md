@@ -310,3 +310,14 @@ Audit logs are retained for 365 days and include:
 2. Update Kubernetes secret: `kubectl create secret tls tot-tls --cert=new.crt --key=new.key -n tent-production --dry-run=client -o yaml | kubectl apply -f -`
 3. Restart services: `kubectl rollout restart deployment -n tent-production`
 4. Verify new certificate: `openssl s_client -connect api.example.com:443 -servername api.example.com`
+
+## Diagnostic Gating (CI)
+
+To prevent stale diagnostic artifacts from prior commits from being committed in pull requests, you can use the `--check-stale` flag on `build.py`.
+
+```bash
+python3 build.py --check-stale [--max-stale-bytes <bytes>]
+```
+
+- `--check-stale`: Runs the stale diagnostic check and exits 1 if any older (non-current-commit) artifacts exist.
+- `--max-stale-bytes <bytes>`: Sets a byte threshold. If the total size of stale files is below this threshold, the command will exit 0. Default is 0 (any stale file causes failure).

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Optional
 
 ROOT = Path(__file__).resolve().parent
-DIAGNOSTIC_DIR = ROOT / "diagnostic"
+DIAGNOSTIC_DIR = Path(os.environ.get("DIAGNOSTIC_DIR", str(ROOT / "diagnostic")))
 DIAGNOSTIC_CHUNK_SIZE = 40 * 1024 * 1024
 ENCRYPTLY_BLOCKER_MESSAGE = "encryptly could not create an archive. You may have timed out; try launching it in the background and waiting for it to finish with no timeout due to a bug in encryptly."
 
@@ -850,8 +850,47 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Check for stale diagnostic artifacts and exit non-zero if found",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Maximum allowed stale bytes for --check-stale (default: 0)",
+    )
 
     args = parser.parse_args()
+
+    if args.check_stale:
+        commit_id = current_commit_id()
+        stale_files = []
+        stale_bytes = 0
+        if DIAGNOSTIC_DIR.exists():
+            diagnostic_files = []
+            diagnostic_files.extend(DIAGNOSTIC_DIR.glob("build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].logd"))
+            diagnostic_files.extend(DIAGNOSTIC_DIR.glob("build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-part*.logd"))
+            diagnostic_files.extend(DIAGNOSTIC_DIR.glob("build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f].json"))
+            diagnostic_files.extend(DIAGNOSTIC_DIR.glob("build-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]-metadata.json"))
+            
+            for path in set(diagnostic_files):
+                if commit_id not in path.name:
+                    stale_files.append(path)
+                    stale_bytes += path.stat().st_size
+                    
+        if stale_files:
+            print(f"  {color('✗ Stale diagnostic artifacts found:', Colors.RED)}")
+            for path in sorted(stale_files):
+                try:
+                    rel_path = path.relative_to(ROOT)
+                except ValueError:
+                    rel_path = path
+                print(f"    {rel_path} ({path.stat().st_size} bytes)")
+            print(f"  Total stale bytes: {stale_bytes} (threshold: {args.max_stale_bytes})")
+            if stale_bytes > args.max_stale_bytes:
+                return 1
+        else:
+            print(f"  {color('✓ No stale diagnostic artifacts found', Colors.GREEN)}")
+        return 0
 
     print(f"\n  {color('Tent of Trials: building', Colors.CYAN)}")
     print(f"  Working directory: {ROOT}")
