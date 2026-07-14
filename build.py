@@ -942,3 +942,29 @@ Diagnostic bundle:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# Added --check-stale flag for CI gating
+import sys
+import os
+
+def check_stale():
+    """Check for stale artifacts."""
+    stale = []
+    for root, dirs, files in os.walk('.'):
+        for f in files:
+            if f.endswith('.pyc') or f == '__pycache__':
+                stale.append(os.path.join(root, f))
+    return stale
+
+if __name__ == "__main__":
+    if "--check-stale" in sys.argv:
+        stale = check_stale()
+        if stale:
+            print(f"Found {len(stale)} stale files:")
+            for s in stale:
+                print(f"  {s}")
+            sys.exit(1)
+        else:
+            print("No stale files found.")
+            sys.exit(0)
