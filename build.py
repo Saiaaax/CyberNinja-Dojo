@@ -259,6 +259,24 @@ def encryptly_platform_help() -> str:
     return f"detected {detected}; available: {available}"
 
 
+def check_stale_artifacts(max_stale_bytes: int) -> int:
+    """Return 0 if stale diagnostic artifacts are within threshold, else 1."""
+    if not DIAGNOSTIC_DIR.exists():
+        return 0
+    current = current_commit_id()
+    stale_bytes = 0
+    for p in DIAGNOSTIC_DIR.glob("build-*.logd"):
+        if current not in p.name:
+            try:
+                stale_bytes += p.stat().st_size
+            except Exception:
+                pass
+    if stale_bytes > max_stale_bytes:
+        print(f"Stale diagnostic artifacts detected: {stale_bytes} bytes (threshold {max_stale_bytes})")
+        return 1
+    return 0
+
+
 def check_encryptly_runs(timeout: int = 600) -> tuple[bool, str]:
     """Verify encryptly can create a diagnostic bundle before doing any build work."""
     encryptly_bin = get_encryptly_bin()
