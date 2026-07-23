@@ -36,3 +36,4 @@ Thumbs.db
 # Java build artifacts
 compliance/build/
 *.class
+.aider*
