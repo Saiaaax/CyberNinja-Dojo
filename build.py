@@ -47,6 +47,19 @@ def diagnostic_paths_for_commit() -> tuple[Path, Path, str]:
     return logd_path, metadata_path, commit_id
 
 
+def find_stale_diagnostic_artifacts(current_commit: str) -> list[Path]:
+    """Find diagnostic artifacts not matching the current commit."""
+    stale_paths = []
+    if DIAGNOSTIC_DIR.exists():
+        for path in DIAGNOSTIC_DIR.glob("build-*.logd"):
+            if not path.name.startswith(f"build-{current_commit}"):
+                stale_paths.append(path)
+        for path in DIAGNOSTIC_DIR.glob("build-*.json"):
+            if not path.name.startswith(f"build-{current_commit}"):
+                stale_paths.append(path)
+    return stale_paths
+
+
 def split_diagnostic_logd(logd_path: Path, chunk_size: int = DIAGNOSTIC_CHUNK_SIZE) -> list[Path]:
     """Split an oversized .logd into numbered .logd chunks and remove the original."""
     if logd_path.stat().st_size <= chunk_size:
@@ -850,6 +863,14 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Exit non-zero if stale diagnostic artifacts exist (for CI gating)",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Maximum allowed bytes of stale diagnostic artifacts (default 0 = any stale is error)",
+    )
 
     args = parser.parse_args()
 
@@ -864,6 +885,32 @@ Diagnostic bundle:
             print(f"      dir: {m.dir.relative_to(ROOT)}")
             print(f"      build: {' '.join(m.build_cmd)}")
         return 0
+
+    if args.check_stale:
+        # Check for stale diagnostic artifacts from previous commits
+        stale_bytes = 0
+        if DIAGNOSTIC_DIR.exists():
+            current_commit = current_commit_id()
+            for path in DIAGNOSTIC_DIR.glob("build-*.logd"):
+                name = path.name
+                # Accept chunked parts too
+                if name.startswith(f"build-{current_commit}"):
+                    continue
+                stale_bytes += path.stat().st_size
+            for path in DIAGNOSTIC_DIR.glob("build-*.json"):
+                name = path.name
+                if name.startswith(f"build-{current_commit}"):
+                    continue
+                stale_bytes += path.stat().st_size
+
+        if stale_bytes > args.max_stale_bytes:
+            print(f"  {color('✗ stale diagnostic artifacts detected', Colors.RED)}")
+            print(f"  {color(f'Stale diagnostic artifacts size: {stale_bytes} bytes', Colors.RED)}")
+            print(f"  {color('Please run `python3 build.py` to regenerate diagnostics and commit them.', Colors.RED)}")
+            return 1
+        else:
+            print(f"  {color('✓ no stale diagnostic artifacts found', Colors.GREEN)}")
+            return 0
 
     print(f"  {color('Checking prerequisites...', Colors.GRAY)}")
     missing = check_prerequisites()
