@@ -812,6 +812,34 @@ def print_summary(results: list[tuple[str, bool, float, str, Optional[str]]]):
           f"{color(str(failed) + ' failed', Colors.RED)}, "
           f"{total_time:.1f}s total")
 
+
+def _is_current_commit(path: Path, current_commit: str) -> bool:
+    cid = path.stem.replace('build-', '')
+    return cid == current_commit
+
+def do_check_stale(current_commit: str, max_stale_bytes: int) -> int:
+    stale = []
+    stale_bytes = 0
+    if DIAGNOSTIC_DIR.exists():
+        for path in DIAGNOSTIC_DIR.glob('build-*.logd'):
+            if not _is_current_commit(path, current_commit):
+                stale.append(path)
+                stale_bytes += path.stat().st_size
+        for path in DIAGNOSTIC_DIR.glob('build-*.json'):
+            if not _is_current_commit(path, current_commit):
+                stale.append(path)
+                stale_bytes += path.stat().st_size
+    if stale:
+        if stale_bytes > max_stale_bytes:
+            print(f"Stale artifacts found: {len(stale)} files, {stale_bytes} bytes")
+            for p in stale[:10]:
+                print(f" - {p}")
+            return 1
+        print(f"Stale artifacts found within threshold: {len(stale)} files, {stale_bytes} bytes")
+    else:
+        print("No stale diagnostic artifacts")
+    return 0
+
 def main():
     parser = argparse.ArgumentParser(
         description="Tent of Trials  -  Multi-Language Build System",
@@ -847,11 +875,22 @@ Diagnostic bundle:
         help="Show detailed build output",
     )
     parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Exit 1 if older diagnostic artifacts (from other commits) exist; suitable for CI gating",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Allow stale artifacts up to this total size in bytes; 0 means any stale is an error",
+    )
+    parser.add_argument(
         "--list", action="store_true",
         help="List available modules and exit",
     )
 
     args = parser.parse_args()
+
+    if args.check_stale:
+        raise SystemExit(do_check_stale(current_commit_id(), args.max_stale_bytes))
 
     print(f"\n  {color('Tent of Trials: building', Colors.CYAN)}")
     print(f"  Working directory: {ROOT}")
