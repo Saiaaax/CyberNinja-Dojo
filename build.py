@@ -47,6 +47,41 @@ def diagnostic_paths_for_commit() -> tuple[Path, Path, str]:
     return logd_path, metadata_path, commit_id
 
 
+def check_stale_diagnostics(commit_id: str, max_stale_bytes: int = 0) -> int:
+    """
+    Check for stale diagnostic artifacts in the diagnostic directory.
+
+    Args:
+        commit_id: The current commit ID to compare against.
+        max_stale_bytes: Maximum allowed bytes of stale artifacts (default 0).
+
+    Returns:
+        0 if no stale artifacts exceed the threshold, 1 otherwise.
+    """
+    stale_bytes = 0
+    if DIAGNOSTIC_DIR.exists():
+        for path in DIAGNOSTIC_DIR.iterdir():
+            if not path.is_file():
+                continue
+            name = path.name
+            # Match diagnostic files for other commits
+            if name.startswith("build-") and name.endswith((".logd", ".json", "-metadata.json")):
+                # Extract commit part
+                parts = name.split(".")[0].split("-")
+                if len(parts) < 2:
+                    continue
+                file_commit = parts[1]
+                if file_commit != commit_id:
+                    stale_bytes += path.stat().st_size
+    if stale_bytes > max_stale_bytes:
+        print(f"  {color('✗ stale diagnostic artifacts detected', Colors.RED)}")
+        print(f"  Total stale bytes: {stale_bytes} (max allowed: {max_stale_bytes})")
+        return 1
+    else:
+        print(f"  {color('✓ no stale diagnostic artifacts found', Colors.GREEN)}")
+        return 0
+
+
 def split_diagnostic_logd(logd_path: Path, chunk_size: int = DIAGNOSTIC_CHUNK_SIZE) -> list[Path]:
     """Split an oversized .logd into numbered .logd chunks and remove the original."""
     if logd_path.stat().st_size <= chunk_size:
@@ -850,6 +885,14 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Exit non-zero if stale diagnostic artifacts exist (CI gating)",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Maximum allowed bytes of stale diagnostic artifacts (default 0 = any stale is error)",
+    )
 
     args = parser.parse_args()
 
@@ -864,6 +907,10 @@ Diagnostic bundle:
             print(f"      dir: {m.dir.relative_to(ROOT)}")
             print(f"      build: {' '.join(m.build_cmd)}")
         return 0
+
+    if args.check_stale:
+        commit_id = current_commit_id()
+        return check_stale_diagnostics(commit_id, args.max_stale_bytes)
 
     print(f"  {color('Checking prerequisites...', Colors.GRAY)}")
     missing = check_prerequisites()
