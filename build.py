@@ -850,6 +850,14 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Exit non-zero if stale diagnostic artifacts exist (for CI gating)",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Maximum allowed bytes of stale diagnostic artifacts (default 0 = any stale is error)",
+    )
 
     args = parser.parse_args()
 
@@ -864,6 +872,27 @@ Diagnostic bundle:
             print(f"      dir: {m.dir.relative_to(ROOT)}")
             print(f"      build: {' '.join(m.build_cmd)}")
         return 0
+
+    if args.check_stale:
+        # Check for stale diagnostic artifacts: any diagnostic logd files not matching current commit
+        commit_id = current_commit_id()
+        stale_bytes = 0
+        if DIAGNOSTIC_DIR.exists():
+            for path in DIAGNOSTIC_DIR.glob("build-*.logd*"):
+                # Acceptable names: build-<commit>.logd or build-<commit>-partNNN.logd
+                # If commit prefix does not match current commit, count bytes
+                name = path.name
+                if not name.startswith(f"build-{commit_id}"):
+                    try:
+                        stale_bytes += path.stat().st_size
+                    except Exception:
+                        pass
+        if stale_bytes > args.max_stale_bytes:
+            print(f"  {color('✗', Colors.RED)} Stale diagnostic artifacts detected: {stale_bytes} bytes > max allowed {args.max_stale_bytes}")
+            return 1
+        else:
+            print(f"  {color('✓', Colors.GREEN)} No stale diagnostic artifacts exceeding threshold ({args.max_stale_bytes} bytes)")
+            return 0
 
     print(f"  {color('Checking prerequisites...', Colors.GRAY)}")
     missing = check_prerequisites()
