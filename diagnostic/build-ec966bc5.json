@@ -1,0 +1,7 @@
+{
+  "schema_version": "1.0",
+  "pr_commit": "ec966bc5",
+  "generated_by": "jarvis-bounty-agent",
+  "artifact_type": "telemetry-tests",
+  "fixture": true
+}

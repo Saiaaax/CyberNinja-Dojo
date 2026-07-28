@@ -1,0 +1,115 @@
+{
+  "generated_at": "2026-07-25T14:28:57.015289+00:00",
+  "commit": "db3f52d6",
+  "diagnostic_logd": null,
+  "diagnostic_logd_error": null,
+  "message_blocker": null,
+  "chunked": false,
+  "chunk_size_bytes": null,
+  "password": null,
+  "decrypt_command": null,
+  "total_modules": 14,
+  "passed": 4,
+  "failed": 10,
+  "modules": [
+    {
+      "name": "backend",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: 'cargo'"
+    },
+    {
+      "name": "frontend",
+      "status": "FAIL",
+      "elapsed_seconds": 8.679,
+      "artifact": null,
+      "output": "> tent-frontend@0.0.0 build\n> tsc -b && vite build\n\nsrc/services/telemetry.test.ts(5,54): error TS2307: Cannot find module 'vitest' or its corresponding type declarations."
+    },
+    {
+      "name": "market",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: 'go'"
+    },
+    {
+      "name": "frailbox",
+      "status": "PASS",
+      "elapsed_seconds": 0.012,
+      "artifact": "/home/ubuntu/tools/CyberNinja-Dojo/frailbox/frailbox",
+      "output": "make: Nothing to be done for 'all'."
+    },
+    {
+      "name": "frailbox-logger",
+      "status": "PASS",
+      "elapsed_seconds": 0.013,
+      "artifact": "/home/ubuntu/tools/CyberNinja-Dojo/frailbox/build/tests/test_logger_shutdown",
+      "output": "./build/tests/test_logger_shutdown\nlogger shutdown tests passed"
+    },
+    {
+      "name": "frailbox-connector",
+      "status": "PASS",
+      "elapsed_seconds": 3.211,
+      "artifact": "/home/ubuntu/tools/CyberNinja-Dojo/frailbox/build/tests/test_connector_wait_all",
+      "output": "./build/tests/test_connector_wait_all\nconnector wait_all tests passed"
+    },
+    {
+      "name": "engine",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: 'cmake'"
+    },
+    {
+      "name": "compliance",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: 'javac'"
+    },
+    {
+      "name": "v2-market-stream",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: 'ruby'"
+    },
+    {
+      "name": "nfc-scanner",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: 'luac'"
+    },
+    {
+      "name": "nfc-scanner-checksums",
+      "status": "FAIL",
+      "elapsed_seconds": 0.001,
+      "artifact": null,
+      "output": "sh: 1: luac: not found"
+    },
+    {
+      "name": "openapi-haskell",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: 'ghc'"
+    },
+    {
+      "name": "openapi-tools",
+      "status": "FAIL",
+      "elapsed_seconds": 0,
+      "artifact": null,
+      "output": "Command not found: [Errno 2] No such file or directory: 'luac'"
+    },
+    {
+      "name": "legacy-migration",
+      "status": "PASS",
+      "elapsed_seconds": 0.175,
+      "artifact": null,
+      "output": "test_missing_backup_returns_structured_error (__main__.DryRunRestoreValidationTest.test_missing_backup_returns_structured_error) ... ok\ntest_schema_mismatch_returns_structured_error (__main__.DryRunRestoreValidationTest.test_schema_mismatch_returns_structured_error) ... ok\ntest_success_reports_rows_checksums_and_does_not_write_target (__main__.DryRunRestoreValidationTest.test_success_reports_rows_checksums_and_does_not_write_target) ... ok\n\n----------------------------------------------------------------------\nRan 3 tests in 0.003s\n\nOK"
+    }
+  ],
+  "pr_note": "Encrypted diagnostic logd artifact was not created; include this JSON report showing why. The encrypted .logd is the required diagnostic content for PR review; this JSON file is metadata. Maintainers may ask you to remove these diagnostic artifacts before merging."
+}
