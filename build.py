@@ -812,6 +812,47 @@ def print_summary(results: list[tuple[str, bool, float, str, Optional[str]]]):
           f"{color(str(failed) + ' failed', Colors.RED)}, "
           f"{total_time:.1f}s total")
 
+def check_stale_artifacts(max_stale_bytes: int = 0) -> tuple[bool, int, int]:
+    """
+    Check for stale diagnostic artifacts (from commits other than current).
+    
+    Returns:
+        tuple[bool, int, int]: (is_clean, stale_count, stale_bytes)
+        - is_clean: True if no stale artifacts (or within threshold)
+        - stale_count: number of stale artifact files
+        - stale_bytes: total bytes of stale artifacts
+    """
+    if not DIAGNOSTIC_DIR.exists():
+        return True, 0, 0
+    
+    current_commit = current_commit_id()
+    stale_files = []
+    stale_bytes = 0
+    
+    # Pattern: build-{commit_id}.logd, build-{commit_id}.json, etc.
+    for artifact in DIAGNOSTIC_DIR.glob("build-*.logd"):
+        # Extract commit ID from filename
+        name = artifact.stem  # e.g., "build-abc12345" or "build-abc12345-part001"
+        if name.startswith("build-"):
+            commit_id = name[6:]  # Remove "build-" prefix
+            # Skip current commit and chunked files (part001, part002, etc.)
+            if commit_id != current_commit and "-part" not in commit_id:
+                if artifact.exists():
+                    stale_files.append(artifact)
+                    stale_bytes += artifact.stat().st_size
+    
+    for artifact in DIAGNOSTIC_DIR.glob("build-*.json"):
+        name = artifact.stem
+        if name.startswith("build-"):
+            commit_id = name[6:]
+            if commit_id != current_commit and not commit_id.endswith("-metadata"):
+                if artifact.exists():
+                    stale_files.append(artifact)
+                    stale_bytes += artifact.stat().st_size
+    
+    is_clean = stale_bytes <= max_stale_bytes
+    return is_clean, len(stale_files), stale_bytes
+
 def main():
     parser = argparse.ArgumentParser(
         description="Tent of Trials  -  Multi-Language Build System",
@@ -850,8 +891,31 @@ Diagnostic bundle:
         "--list", action="store_true",
         help="List available modules and exit",
     )
+    parser.add_argument(
+        "--check-stale", action="store_true",
+        help="Check for stale diagnostic artifacts and exit non-zero if found",
+    )
+    parser.add_argument(
+        "--max-stale-bytes", type=int, default=0,
+        help="Maximum bytes of stale artifacts allowed (default: 0 = any stale is error)",
+    )
 
     args = parser.parse_args()
+
+    # Handle --check-stale flag (CI gate mode)
+    if args.check_stale:
+        is_clean, stale_count, stale_bytes = check_stale_artifacts(args.max_stale_bytes)
+        if is_clean:
+            print(f"  {color('✓', Colors.GREEN)} No stale diagnostic artifacts found")
+            if stale_count > 0:
+                print(f"    ({stale_count} files, {stale_bytes} bytes - within threshold)")
+            return 0
+        else:
+            print(f"  {color('✗', Colors.RED)} Stale diagnostic artifacts detected!")
+            print(f"    {stale_count} files, {stale_bytes} bytes")
+            print(f"    Threshold: {args.max_stale_bytes} bytes")
+            print(f"    Run 'python3 build.py --clean' to remove stale artifacts")
+            return 1
 
     print(f"\n  {color('Tent of Trials: building', Colors.CYAN)}")
     print(f"  Working directory: {ROOT}")
