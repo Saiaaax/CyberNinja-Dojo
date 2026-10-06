@@ -310,3 +310,14 @@ Audit logs are retained for 365 days and include:
 2. Update Kubernetes secret: `kubectl create secret tls tot-tls --cert=new.crt --key=new.key -n tent-production --dry-run=client -o yaml | kubectl apply -f -`
 3. Restart services: `kubectl rollout restart deployment -n tent-production`
 4. Verify new certificate: `openssl s_client -connect api.example.com:443 -servername api.example.com`
+
+## Telemetry Testing
+
+To run the telemetry client-side unit tests in Node.js (via `tsx` test runner), navigate to the `frontend` directory and execute the following command:
+
+```bash
+cd frontend
+npx tsx --test src/services/__tests__/telemetry.test.ts
+```
+
+This verifies the batch flushing behavior, page unload hooks, and payload queue retention logic when flush requests fail, without hitting any external endpoints or spinning up a real browser.
