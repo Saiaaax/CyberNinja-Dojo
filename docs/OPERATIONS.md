@@ -310,3 +310,10 @@ Audit logs are retained for 365 days and include:
 2. Update Kubernetes secret: `kubectl create secret tls tot-tls --cert=new.crt --key=new.key -n tent-production --dry-run=client -o yaml | kubectl apply -f -`
 3. Restart services: `kubectl rollout restart deployment -n tent-production`
 4. Verify new certificate: `openssl s_client -connect api.example.com:443 -servername api.example.com`
+
+
+### Diagnostic Build Verification
+The build script provides an automated CI gating flag:
+- `python3 build.py --check-stale`: returns exit code 1 if stale non-current commit artifacts exist under `diagnostic/`, returns 0 if clean.
+- `python3 build.py --check-stale --max-stale-bytes 1024`: allows stale artifacts up to the specified byte threshold.
+- The command operates in read-only mode and does not modify or delete artifacts.
